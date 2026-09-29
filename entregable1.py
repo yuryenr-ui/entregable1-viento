@@ -1299,8 +1299,8 @@ mau
 #   sur de Bolívar. La coropleta muestra a La Guajira muy por encima del resto, pero un promedio
 #   departamental mezcla sitios muy distintos (costa y montaña); por eso el análisis se hace por
 #   estación (ver MAUP más abajo).
-# * **Patrón de puntos:** las estaciones están un poco más regularmente espaciadas que al azar
-#   (Clark-Evans R = 1.16), con una mediana de 26 km al vecino más cercano. Hay zonas con poca cobertura,
+# * **Patrón de puntos:** el índice de Clark-Evans sugiere un espaciamiento algo más regular que al azar
+#   (R = 1.16, sin prueba de significancia; la función de Ripley de abajo no detecta diferencias con el azar), con una mediana de 26 km al vecino más cercano. Hay zonas con poca cobertura,
 #   como el sur de Bolívar y el interior de La Guajira.
 # * **Autocorrelación espacial:** fuerte y significativa (I de Moran = 0.45, p = 0.001). El LISA, con
 #   corrección FDR por las pruebas múltiples, identifica un único agrupamiento: el **hotspot alto-alto de La Guajira** (5 estaciones; 8 sin corregir). Los mapas LISA son **exploratorios**. El
