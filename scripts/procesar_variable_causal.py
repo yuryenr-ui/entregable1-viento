@@ -2,14 +2,14 @@
 anterior a ella (o metadatos estáticos del catálogo). Sirve para evaluar el modelo sin información futura
 en ninguna partición.
 
-Uso: python procesar_variable_causal.py <variable> <catalogo.csv> archivo1.csv archivo2.csv ...
+Uso: python procesar_variable_causal.py <variable> <catalogo.csv> archivo1.csv archivo2.csv ... [--temp-solo-altas]
      <variable> ∈ velocidad | direccion | temperatura | presion
 Salida: panel_<variable>_causal.csv y reportes/<variable>_causal.txt
 
 Reglas (mismos parámetros por variable que procesar_variable.py):
-* Rango de control fijo, lectura por lectura.
+* Rango de control fijo, lectura por lectura. Todos los umbrales se fijaron antes de ver los datos de 2025.
 * Sensor defectuoso: la lectura se enmascara si, en los 30 días ANTERIORES al día de la lectura, más del
-  0.5 % de las lecturas del sensor violaron el criterio (fuera de rango; en temperatura, > 45 °C). Se
+  0.5 % de las lecturas del sensor estuvieron fuera de rango. Se
   exigen al menos 100 lecturas en esa ventana.
 * Sensor pegado: el valor se enmascara solo desde el momento en que el tramo constante alcanza el plazo de
   su variable (6 h; 12 h en presión; 24 h si el valor es 0 en velocidad y dirección). Las lecturas previas
@@ -30,7 +30,8 @@ import pandas as pd
 CONFIG = {
     "velocidad": dict(rango=(0, 25), pegado_h=6, cero_h=24, circular=False, solo_altas=False),
     "direccion": dict(rango=(0, 360), pegado_h=6, cero_h=24, circular=True, solo_altas=False),
-    "temperatura": dict(rango=(3, 45), pegado_h=6, cero_h=None, circular=False, solo_altas=True),
+    # criterio de sensor defectuoso: toda lectura fuera de [3, 45] °C (fijado antes de ver 2025)
+    "temperatura": dict(rango=(3, 45), pegado_h=6, cero_h=None, circular=False, solo_altas=False),
     "presion": dict(rango=(500, 1100), pegado_h=12, cero_h=None, circular=False, solo_altas=False, desvio=30),
 }
 NOMINAL_MIN = {"0103": 10, "0111": 2, "0104": 10, "0068": 60, "0071": 2, "0255": 60, "0258": 2}
@@ -38,8 +39,14 @@ DEPTOS = {"ATLANTICO", "BOLIVAR", "CESAR", "CORDOBA", "LA GUAJIRA", "MAGDALENA",
 FRAC_DEFECTO, VENTANA, MIN_LECT_VENTANA = 0.005, "30D", 100
 MAX_DIF_ALTITUD, MIN_FRAC_HORA = 50, 0.5
 
-VAR, CATALOGO, ARCHIVOS = sys.argv[1], sys.argv[2], sys.argv[3:]
-CFG = CONFIG[VAR]
+VAR, CATALOGO = sys.argv[1], sys.argv[2]
+ARCHIVOS = [x for x in sys.argv[3:] if not x.startswith("--")]
+CFG = dict(CONFIG[VAR])
+# análisis de sensibilidad: en temperatura, contar solo las lecturas > 45 °C para marcar un sensor como
+# defectuoso (criterio de la limpieza original, adoptado después de ver 2025)
+if "--temp-solo-altas" in sys.argv:
+    CFG["solo_altas"] = True
+SUF = "_causal_alt" if "--temp-solo-altas" in sys.argv else "_causal"
 LO, HI = CFG["rango"]
 Path("reportes").mkdir(exist_ok=True)
 log_lineas = []
@@ -167,7 +174,7 @@ h = h.merge(meta[["nombre", "depto", "municipio", "lat", "lon"]], left_on="Codig
 h["CodigoSensor"] = "causal"
 h = h.sort_values(["CodigoEstacion", "hora"])
 h[["CodigoEstacion", "CodigoSensor", "nombre", "depto", "municipio", "lat", "lon", "hora", "v"] + extra + ["n"]].to_csv(
-    f"panel_{VAR}_causal.csv", index=False)
+    f"panel_{VAR}{SUF}.csv", index=False)
 log(f"Panel causal {VAR}: {len(h):,} estación-horas | {h.CodigoEstacion.nunique()} estaciones")
 log("Estación-horas por año: " + str(h.groupby(h.hora.dt.year).size().to_dict()))
-Path("reportes", f"{VAR}_causal.txt").write_text("\n".join(log_lineas), encoding="utf-8")
+Path("reportes", f"{VAR}{SUF}.txt").write_text("\n".join(log_lineas), encoding="utf-8")

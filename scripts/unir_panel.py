@@ -1,6 +1,6 @@
 """Une los paneles horarios de cada variable con el catálogo de estaciones del IDEAM.
 
-Uso: python unir_panel.py <catalogo.csv> [--causal]
+Uso: python unir_panel.py <catalogo.csv> [--causal [--temp-alt]]
 Entrada: panel_velocidad.csv (obligatorio) y panel_direccion/temperatura/presion.csv (los que existan);
 con --causal, los panel_<variable>_causal.csv.
 Salida: panel_multivariado.csv (una fila por estación-hora con velocidad válida), o
@@ -16,6 +16,7 @@ import pandas as pd
 MAX_DIF_ALTITUD = 50  # hPa: presión mediana de una estación-año incompatible con la altitud de la estación
 CAUSAL = "--causal" in sys.argv
 SUF = "_causal" if CAUSAL else ""
+TEMP_ALT = "--temp-alt" in sys.argv  # sensibilidad: temperatura con el criterio "solo > 45 °C"
 
 cat = pd.read_csv(sys.argv[1], dtype=str)
 cat["altitud"] = pd.to_numeric(cat.Altitud.str.replace(".", "", regex=False).str.replace(",", "."), errors="coerce")
@@ -23,8 +24,12 @@ cat = cat.rename(columns={"Codigo": "CodigoEstacion", "Categoria": "categoria"})
     ["CodigoEstacion", "categoria", "altitud"]]
 
 
+def archivo(var):
+    return f"panel_{var}_causal_alt.csv" if (TEMP_ALT and var == "temperatura") else f"panel_{var}{SUF}.csv"
+
+
 def cargar(var):
-    p = pd.read_csv(f"panel_{var}{SUF}.csv", dtype={"CodigoEstacion": str}, parse_dates=["hora"])
+    p = pd.read_csv(archivo(var), dtype={"CodigoEstacion": str}, parse_dates=["hora"])
     return p
 
 
@@ -33,7 +38,7 @@ base = cargar("velocidad").rename(columns={"v": "vel"}).drop(columns=["CodigoSen
 extras = {"direccion": {"v": "dir", "v_sin": "dir_sin", "v_cos": "dir_cos", "constancia": "dir_constancia"},
           "temperatura": {"v": "temp"}, "presion": {"v": "pres"}}
 for var, nombres in extras.items():
-    if not Path(f"panel_{var}{SUF}.csv").exists():
+    if not Path(archivo(var)).exists():
         print(f"{var}: no hay panel todavía")
         continue
     p = cargar(var).rename(columns=nombres)[["CodigoEstacion", "hora"] + list(nombres.values())]
@@ -58,7 +63,7 @@ if "pres" in base and not CAUSAL:
     base = base.drop(columns="anio")
 
 base = base.sort_values(["CodigoEstacion", "hora"])
-base.to_csv(f"panel_multivariado{SUF}.csv", index=False)
+base.to_csv(f"panel_multivariado{SUF}{'_temp_alt' if TEMP_ALT else ''}.csv", index=False)
 
 base["anio"] = base.hora.dt.year
 cols = [c for c in ["vel", "dir", "temp", "pres"] if c in base]

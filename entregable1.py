@@ -16,7 +16,7 @@
 # mkdir ../ideam_viento
 # cd ../ideam_viento
 # python ../entregable1/scripts/procesar_todo.py "<carpeta con los CSV descargados>"            # limpieza original
-# python ../entregable1/scripts/procesar_todo.py "<carpeta con los CSV descargados>" --causal   # limpieza causal (3.6)
+# python ../entregable1/scripts/procesar_todo.py "<carpeta con los CSV descargados>" --causal   # limpieza causal (sección 3) y sensibilidad de 3.6
 # python ../entregable1/scripts/verificar_conteo.py "<carpeta con los CSV descargados>"
 # ```
 #
@@ -344,13 +344,13 @@ excl.sort_values(["variable", "anio"])
 # | Dirección: rango [0, 360]°, mismos plazos que la velocidad | 2020–2021 | No |
 # | Presión: rango [500, 1100] hPa, picos a > 30 hPa, tramo pegado 12 h, 50 hPa frente a la altitud | 2020–2023 | No |
 # | Temperatura: rango [3, 45] °C y tramo pegado 6 h | 2020–2022 | No |
-# | Temperatura: el criterio de sensor defectuoso cuenta solo lecturas > 45 °C (los 0 °C sueltos solo se enmascaran) | 2020–2025 | **Sí** |
+# | Temperatura: el criterio de sensor defectuoso cuenta solo lecturas > 45 °C (los 0 °C sueltos solo se enmascaran) | 2020–2025 | **Sí** — solo en la depuración original (EDA) |
 # | Hora válida con ≥ 50 % de lecturas; ventana de 30 días y mínimo de 100 lecturas (limpieza causal, 3.6) | Fijados a priori, sin ajustarlos a los resultados | No |
 #
-# El único criterio fijado después de ver 2025 es el de la temperatura. Se puede justificar con el
-# entrenamiento: los 0 °C sueltos ya aparecían en 2020–2021 (Pueblo Bello, Puerta Roja) mezclados con
-# lecturas normales, mientras que los sensores defectuosos se reconocen por repetir el tope de 50 °C.
-# Aun así, queda como una decisión tomada con información del periodo de prueba.
+# El único criterio fijado después de ver 2025 es el de sensor defectuoso de la temperatura, y **solo se
+# usa en la depuración original del EDA**. El modelado (sección 3) usa el criterio general, fijado antes
+# de ver 2025 (cualquier lectura fuera de [3, 45] °C cuenta para marcar el sensor), y la sección 3.6
+# comprueba que con el otro criterio el resultado prácticamente no cambia.
 #
 # **Justificación de los umbrales.** Los umbrales se eligieron para esta red a partir de la propia
 # auditoría, no como límites físicos universales. Para no justificar la limpieza con los datos ya
@@ -1456,6 +1456,58 @@ fig.tight_layout(); plt.show()
 #   (`vel(t)`: la misma hora del día anterior al objetivo) y climatología estación × mes × hora.
 # * **Partición:** entrenamiento 2020–2024, prueba 2025 (definida en 2.0, antes de todo el EDA).
 #
+# **Datos del modelado: limpieza sin información futura.** El EDA (secciones 1–2) usa la depuración
+# original, que mira la estación-año completa (1.6). Para que **ninguna etapa del modelado use
+# información futura**, toda la sección 3 usa un panel reprocesado desde los CSV originales con
+# `scripts/procesar_variable_causal.py` (`procesar_todo.py --causal`), en el que **cada lectura se limpia
+# solo con lo ocurrido antes de ella** o con metadatos estáticos del catálogo:
+#
+# | Regla retrospectiva (EDA, secciones 1–2) | Regla causal (modelado, sección 3) |
+# |---|---|
+# | Excluir la estación-año si > 0.5 % de lecturas anómalas | Enmascarar la lectura si en los **30 días anteriores** el sensor tuvo > 0.5 % de lecturas anómalas (mínimo 100 lecturas) |
+# | Tramo pegado borrado desde su inicio | Se enmascara **desde que el tramo cumple el plazo** de su variable (6 h; 12 h en presión; 24 h los ceros de velocidad y dirección); las lecturas previas se conservan |
+# | Picos de presión respecto a la mediana del año | Respecto a la mediana de los **30 días anteriores**; sin historial, la presión estándar para la altitud del catálogo |
+# | Presión frente a la altitud con la mediana del año | Con la mediana de los 30 días anteriores |
+# | Frecuencia de muestreo estimada con el año completo | Mediana de los **144 intervalos anteriores** del sensor; sin historial, la frecuencia nominal del tipo de sensor |
+# | Sensor con más horas en el año | Si hay varios sensores válidos en la hora, **se promedian** |
+# | Nombre y coordenadas de la última observación | De la **primera** observación |
+#
+# **Estaciones y sensores nuevos:** no se descartan por falta de historial. Hasta acumular 30 días no se
+# puede marcar el sensor como defectuoso (solo se aplica el rango fijo), la frecuencia de muestreo se
+# toma de su tipo de sensor y la referencia de presión es la esperada por la altitud.
+#
+# Como la limpieza es causal en todos los años, cada pliegue de la validación cruzada (2021–2024) y la
+# prueba (2025) usan datos limpiados solo con su pasado. Las predictoras se construyen con la misma
+# función que en 2.0; la lista de vecinos usa las coordenadas de la primera observación. La sección 3.6
+# compara este procesamiento con el original.
+
+# %%
+def preparar_panel(ruta):
+    # lee un panel estación-hora y construye el conjunto de modelado (mismas predictoras que en 2.0)
+    P_ = pd.read_csv(ruta, dtype={"CodigoEstacion": str}, parse_dates=["hora"]).rename(columns={"CodigoEstacion": "est"})
+    co = P_.groupby("est")[["lat", "lon"]].first()
+    di = haversine_matriz(co.lat.to_numpy(), co.lon.to_numpy())
+    np.fill_diagonal(di, np.inf)
+    vec = {e: co.index[np.argsort(di[i])[:K_VECINOS]].tolist() for i, e in enumerate(co.index)}
+    an = P_.pivot(index="hora", columns="est", values="vel")
+    vv = pd.DataFrame({e: an[v].mean(axis=1) for e, v in vec.items()})
+    G_ = (P_.set_index("hora").groupby("est")[["vel", "dir_sin", "dir_cos", "dir_constancia", "temp", "pres", "altitud"]]
+          .apply(lambda g: g.asfreq("h")))
+    todo = G_.groupby(level="est", group_keys=True).apply(construir, vv=vv).reset_index().rename(columns={"hora": "t"})
+    return P_, todo, todo.dropna(subset=F_ESP + ["y"]).reset_index(drop=True)
+
+
+PC, D_todo_c, D_c = preparar_panel(DATOS / "panel_multivariado_causal.csv")
+D_o, TR_o, TE_o, D_todo_o = D, TR, TE, D_todo            # procesamiento original (EDA y comparación en 3.6)
+D, D_todo = D_c, D_todo_c                                # desde aquí, todo el modelado usa la limpieza causal
+TR, TE = D[D.t_y < TEST_INI], D[D.t >= TEST_INI]
+completas_c = PC[["vel", "dir", "temp", "pres"]].notna().all(axis=1)
+print(f"Panel causal: {len(PC):,} estación-horas con velocidad ({PC.est.nunique()} estaciones); "
+      f"{completas_c.sum():,} con las 4 variables")
+print(f"Conjunto de modelado causal: {len(D):,} filas | entrenamiento {len(TR):,} | prueba {len(TE):,} "
+      f"({TE.est.nunique()} estaciones) | {len(D) - len(TR) - len(TE)} filas de separación en el cambio de año")
+
+# %% [markdown]
 # ## 3.1 Validación cruzada temporal en entrenamiento
 #
 # Pliegues expansivos por años completos: se entrena con los años anteriores y se valida con el
@@ -1664,37 +1716,6 @@ cobertura = pd.DataFrame({
 cobertura
 
 # %% [markdown]
-# **Sensibilidad a la limpieza retrospectiva.** Se repite la evaluación de 2025 excluyendo las estaciones
-# con las intervenciones retrospectivas más fuertes en 2025: estación-año excluida o más del 1 % de
-# lecturas enmascaradas por tramos pegados o picos, en alguna de las 4 variables. Las estaciones que
-# quedan pueden tener hasta un 1 % de lecturas enmascaradas y siguen pasando por los demás pasos
-# retrospectivos (frecuencia de muestreo, elección del sensor).
-
-# %%
-aud25 = aud[aud.anio == 2025]
-intervenidas = set(aud25[aud25.excluida | (aud25.frac_pegado > 0.01)].CodigoEstacion)
-limpias = ~TE.est.isin(intervenidas)
-sens_limp = pd.DataFrame({
-    "estaciones": [TE.est.nunique(), TE[limpias].est.nunique()], "filas": [len(TE), limpias.sum()],
-    **{k: [resultados.loc["SVR + meteorología + espacial", k], v] for k, v in
-       metricas(y_te[limpias.to_numpy()], pred_te[limpias.to_numpy()], pers_te[limpias.to_numpy()],
-                TE.est.to_numpy()[limpias.to_numpy()]).items()}},
-    index=["todas las estaciones de prueba", "sin exclusiones y con ≤ 1 % de lecturas enmascaradas en 2025"])
-print(f"Estaciones de prueba con intervenciones retrospectivas en 2025: {TE.est.isin(intervenidas).groupby(TE.est).first().sum()}")
-sens_limp
-
-# %% [markdown]
-# **Interpretación.** Solo 3 de las 51 estaciones de prueba cumplen ese criterio de intervención fuerte
-# en 2025. Al quitarlas, las métricas prácticamente no cambian (R² 0.738 frente a
-# 0.739, la misma mejora del 13 % sobre la persistencia). Esto muestra que **el resultado es estable ante
-# esa exclusión**; no demuestra que la limpieza retrospectiva no introduzca ningún sesgo ni equivale a
-# una simulación operativa, porque la frecuencia de muestreo y la elección del sensor también usan el
-# año completo. Reconstruir todo el procesamiento solo con información pasada queda como trabajo
-# pendiente. Las dos reglas retrospectivas cuantificables (exclusión de estación-años y
-# tramos pegados o picos) afectan, sin contar dos veces las lecturas que caen en ambas, al 2.01 % de las
-# lecturas auditadas, sobre todo de dirección del viento.
-
-# %% [markdown]
 # ## 3.3 Diagnóstico de residuos
 
 # %%
@@ -1783,200 +1804,133 @@ plt.show()
 coef.to_frame("coeficiente").T
 
 # %% [markdown]
-# **Interpretación.**
+# **Interpretación** (todos los resultados de esta sección usan la limpieza causal).
 #
-# * **Validación cruzada:** C no cambia el resultado (con n ≈ 400 000 la regularización
-#   pesa poco), y el SVR da prácticamente lo mismo que `Ridge`, como se espera con esta pérdida. Transformar el objetivo con log(1 + y) empeora mucho el RMSE, porque al devolver la
-#   predicción a m/s con la exponencial se amplifican los errores; por eso se usa el objetivo sin
-#   transformar.
-# * **Desempeño en 2025:** el SVR completo obtiene R² = 0.74 (IC 95 %: 0.72–0.76) y RMSE = 0.73 m/s
-#   (0.71–0.76), frente a R² = 0.65 (0.62–0.68) de la persistencia: **mejora el RMSE de la persistencia
-#   en un 13 %** (IC 95 %: 12–14 %). Supera a la persistencia en el 94 % de las estaciones y también en
-#   estaciones que no se usaron para ajustarlo (mejora media del 13 %, R² = 0.69). Con **bloques
-#   geográficos y buffer de 30 km** (sin rezago espacial), la mejora media sobre la persistencia se
-#   mantiene en 12 % de media y es positiva en los seis bloques (entre 6 % y 17 %). El promedio de los R²
-#   de los bloques (no un R² calculado con todas las predicciones juntas) es 0.57, y varía mucho entre
-#   bloques (0.32 a 0.74): la capacidad de generalizar a zonas nuevas depende de la
-#   región. La climatología y el modelo de la media
-#   quedan muy por detrás. El resultado es estable frente a la longitud de los bloques del bootstrap
-#   (3, 7 o 14 días).
-# * **Aporte de cada grupo de variables:** casi todo el aporte viene de la velocidad pasada (+12.2 %);
-#   la meteorología y el rezago espacial suman menos de 1 punto. En la comparación pareada con bootstrap (mismos
-#   bloques de días), la meteorología reduce el RMSE en 0.007 m/s (IC 95 %: 0.006–0.008) y el rezago
-#   espacial en 0.001 m/s (0.001–0.002): son diferencias **estadísticamente distinguibles de cero pero
-#   prácticamente despreciables**. El SVR y `Ridge` dan predicciones prácticamente idénticas. Los coeficientes lo confirman: los
-#   mayores son la velocidad actual (0.43), la de hace 23 h (0.32) y la media de 24 h (0.28). En
-#   esencia, el modelo aprende que el viento de mañana a esta hora es una combinación del de hoy a esta
-#   hora y del nivel de hoy.
-# * **Por intensidad del viento:** no hay predicciones negativas. El SVR mejora a la persistencia
-#   en todos los tramos por debajo de 6 m/s, pero **con vientos fuertes (≥ 6 m/s, 2 % de las horas) es
-#   peor que la persistencia y los subestima en 1.3 m/s de media**: el modelo lineal "tira hacia la
-#   media". Es una limitación relevante para aplicaciones eólicas.
+# * **Validación cruzada:** C no cambia el resultado (con n ≈ 400 000 la regularización pesa poco) y el
+#   SVR da prácticamente lo mismo que `Ridge`, como se espera con esta pérdida. Transformar el objetivo
+#   con log(1 + y) empeora mucho el RMSE (mejora media sobre la persistencia de 1 % frente a 13 %), porque
+#   al devolver la predicción a m/s con la exponencial se amplifican los errores; por eso se usa el
+#   objetivo sin transformar.
+# * **Desempeño en 2025:** el SVR completo obtiene R² = 0.737 (IC 95 %: 0.713–0.756) y RMSE = 0.733 m/s
+#   (0.710–0.758), frente a R² = 0.651 (0.614–0.679) de la persistencia: **mejora el RMSE de la
+#   persistencia en un 13.2 %** (IC 95 %: 12.2–14.4 %), de forma estable frente a la longitud de los
+#   bloques del bootstrap (3, 7 o 14 días). Supera a la persistencia en el 94 % de las estaciones. La
+#   climatología y el modelo de la media quedan muy por detrás.
+# * **Generalización espacial:** en estaciones que no se usaron para ajustar el modelo (`GroupKFold`), la
+#   mejora media es del 13 % (R² medio de los pliegues 0.65). Con **bloques geográficos y buffer de
+#   30 km** (sin rezago espacial), la mejora media es del 12 % y es positiva en los seis bloques (entre 6 %
+#   y 17 %). El promedio de los R² de los bloques (no un R² calculado con todas las predicciones juntas)
+#   es 0.57 y varía mucho entre bloques (0.30 a 0.73): la capacidad de generalizar a zonas nuevas depende
+#   de la región.
+# * **Aporte de cada grupo de variables:** casi todo el aporte viene de la velocidad pasada (+12.3 %). En
+#   la comparación pareada con bootstrap, la meteorología reduce el RMSE en 0.007 m/s (IC 95 %:
+#   0.006–0.008) y el rezago espacial en 0.001 m/s (0.001–0.002): diferencias **estadísticamente
+#   distinguibles de cero pero prácticamente despreciables**. Los coeficientes lo confirman: los mayores
+#   son la velocidad actual (0.43), la de hace 23 h (0.31) y la media de 24 h (0.27). En esencia, el modelo
+#   aprende que el viento de mañana a esta hora es una combinación del de hoy a esta hora y del nivel de
+#   hoy.
+# * **Por intensidad del viento:** no hay predicciones negativas. El SVR mejora a la persistencia en
+#   todos los tramos por debajo de 6 m/s, pero **con vientos fuertes (≥ 6 m/s, 2 % de las horas) es peor
+#   que la persistencia (RMSE 1.75 frente a 1.59 m/s) y los subestima en 1.3 m/s de media**: el modelo
+#   lineal "tira hacia la media". Es una limitación relevante para aplicaciones eólicas.
 # * **Población cubierta:** el modelo de solo velocidad, evaluado sobre todas las filas con velocidad
-#   (309 293 filas y 65 estaciones en 2025, frente a 210 859 y 51 con las 4 variables), da el mismo
-#   desempeño agregado (R² = 0.74, mejora del 12 %). Es decir, al ampliar la población evaluada el
-#   modelo de solo velocidad obtiene resultados agregados similares; esto no demuestra por sí solo que
-#   la restricción a casos completos no introduzca ningún sesgo en subgrupos concretos.
+#   (310 027 filas y 65 estaciones en 2025, frente a 213 972 y 53 con las 4 variables), obtiene resultados
+#   agregados similares (R² = 0.74, mejora del 12 %). Esto no demuestra por sí solo que la restricción a
+#   casos completos no introduzca ningún sesgo en subgrupos concretos.
 # * **Residuos:** tienen asimetría positiva y colas pesadas (curtosis 4.0), heterocedasticidad
-#   (Breusch-Pagan, p ≈ 0: el error crece con la velocidad predicha), fuerte autocorrelación en el
-#   rezago de 1 h (0.64) y autocorrelación espacial (I de Moran de 0.30 para el residuo medio por
-#   estación; significativa en el 56 % de los días). Los residuos conservan estructura temporal y
-#   espacial que el modelo lineal no captura.
-# * **Curva de aprendizaje:** el error de validación deja de bajar a partir de unas 90 000 filas y el
+#   (Breusch-Pagan, p ≈ 0: el error crece con la velocidad predicha), fuerte autocorrelación en el rezago
+#   de 1 h (0.65) y autocorrelación espacial (I de Moran de 0.29 para el residuo medio por estación;
+#   significativa en el 55 % de los días). Los residuos conservan estructura temporal y espacial que el
+#   modelo lineal no captura.
+# * **Curva de aprendizaje:** el error de validación deja de bajar a partir de unas 95 000 filas y el
 #   error de entrenamiento no disminuye. Esto **sugiere** sesgo alto (el modelo lineal no captura toda la
 #   estructura) más que falta de datos. No lo demuestra: al ampliar la ventana cambian a la vez la
 #   cantidad de datos, los años y las estaciones incluidas.
 
 # %% [markdown]
-# ## 3.6 Evaluación sin información futura (limpieza causal)
+# ## 3.6 Comparación con el procesamiento original y con el criterio alternativo de temperatura
 #
-# Las secciones anteriores usan datos depurados con reglas que miran la estación-año completa. Para
-# evaluar el modelo **sin información futura en ninguna etapa**, los CSV originales se reprocesaron con
-# `scripts/procesar_variable_causal.py` (`procesar_todo.py --causal`), en el que **cada lectura se limpia
-# solo con lo ocurrido antes de ella** o con metadatos estáticos del catálogo:
-#
-# | Regla retrospectiva (secciones 1–3.5) | Regla causal (esta sección) |
-# |---|---|
-# | Excluir la estación-año si > 0.5 % de lecturas anómalas | Enmascarar la lectura si en los **30 días anteriores** el sensor tuvo > 0.5 % de lecturas anómalas (mínimo 100 lecturas) |
-# | Tramo pegado borrado desde su inicio | Se enmascara **desde que el tramo cumple el plazo** de su variable (6 h; 12 h en presión; 24 h los ceros de velocidad y dirección); las lecturas previas se conservan |
-# | Picos de presión respecto a la mediana del año | Respecto a la mediana de los **30 días anteriores**; sin historial, la presión estándar para la altitud del catálogo |
-# | Presión frente a la altitud con la mediana del año | Con la mediana de los 30 días anteriores |
-# | Frecuencia de muestreo estimada con el año completo | Mediana de los **144 intervalos anteriores** del sensor; sin historial, la frecuencia nominal del tipo de sensor |
-# | Sensor con más horas en el año | Si hay varios sensores válidos en la hora, **se promedian** |
-# | Nombre y coordenadas de la última observación | De la **primera** observación |
-#
-# **Estaciones y sensores nuevos:** no se descartan por falta de historial. Hasta acumular 30 días no se
-# puede marcar el sensor como defectuoso (solo se aplica el rango fijo), la frecuencia de muestreo se
-# toma de su tipo de sensor y la referencia de presión es la esperada por la altitud.
-#
-# Con este panel se repite **todo** el modelado: construcción de predictoras, validación cruzada por años
-# (2021–2024, cada pliegue con datos limpiados solo con su pasado), ajuste final con 2020–2024 y prueba en
-# 2025. La lista de vecinos del rezago espacial usa las coordenadas de la primera observación.
+# **Procesamiento original.** Se ajusta el mismo modelo (misma configuración) con el panel de la
+# depuración original y se compara con el principal. Primero cada evaluación con su propia población
+# de prueba; después solo sobre las **observaciones comunes** (misma estación y hora, mismo valor
+# objetivo), para separar un cambio de desempeño de un cambio en la población evaluada.
 
 # %%
-PC = pd.read_csv(DATOS / "panel_multivariado_causal.csv", dtype={"CodigoEstacion": str}, parse_dates=["hora"])
-PC = PC.rename(columns={"CodigoEstacion": "est"})
-coords_c = PC.groupby("est")[["lat", "lon"]].first()
-dist_c = haversine_matriz(coords_c.lat.to_numpy(), coords_c.lon.to_numpy())
-np.fill_diagonal(dist_c, np.inf)
-vecinos_c = {e: coords_c.index[np.argsort(dist_c[i])[:K_VECINOS]].tolist() for i, e in enumerate(coords_c.index)}
-ancho_c = PC.pivot(index="hora", columns="est", values="vel")
-vel_vecinos_c = pd.DataFrame({e: ancho_c[v].mean(axis=1) for e, v in vecinos_c.items()})
-G_c = (PC.set_index("hora").groupby("est")[["vel", "dir_sin", "dir_cos", "dir_constancia", "temp", "pres", "altitud"]]
-       .apply(lambda g: g.asfreq("h")))
-D_c = (G_c.groupby(level="est", group_keys=True).apply(construir, vv=vel_vecinos_c).reset_index()
-       .rename(columns={"hora": "t"}))
-D_c = D_c.dropna(subset=F_ESP + ["y"]).reset_index(drop=True)
-TR_c, TE_c = D_c[D_c.t_y < TEST_INI], D_c[D_c.t >= TEST_INI]
-completas_c = PC[["vel", "dir", "temp", "pres"]].notna().all(axis=1)
-print(f"Panel causal: {len(PC):,} estación-horas con velocidad ({PC.est.nunique()} estaciones); "
-      f"{completas_c.sum():,} con las 4 variables")
-print(f"Conjunto de modelado causal: {len(D_c):,} filas | entrenamiento {len(TR_c):,} | prueba {len(TE_c):,} "
-      f"({TE_c.est.nunique()} estaciones)")
-
-cv_c = []
-for log in [False, True]:
-    for C in [0.01, 0.1, 1.0]:
-        for a, tr, va in pliegues(TR_c):
-            rm = np.sqrt(mean_squared_error(va.y, svr(C, log).fit(tr[F_ESP], tr.y).predict(va[F_ESP])))
-            cv_c.append({"log(1+y)": log, "C": C, "año validación": a, "RMSE": rm,
-                         "mejora": 1 - rm / np.sqrt(mean_squared_error(va.y, va.vel_l0))})
-cv_c = pd.DataFrame(cv_c)
-tabla_cv_c = cv_c.pivot_table(index=["log(1+y)", "C"], columns="año validación", values="RMSE")
-tabla_cv_c["RMSE medio"] = tabla_cv_c.mean(axis=1)
-tabla_cv_c["mejora media vs. persistencia"] = cv_c.groupby(["log(1+y)", "C"]).mejora.mean()
-LOG_C, C_C = tabla_cv_c["RMSE medio"].idxmin()
-print(f"Configuración elegida con la validación cruzada causal: log(1+y) = {LOG_C}, C = {C_C}")
-tabla_cv_c
-
-# %%
-y_c, pers_c, est_c = TE_c.y.to_numpy(), TE_c.vel_l0.to_numpy(), TE_c.est.to_numpy()
-clim_cc = TR_c.groupby(["est", "mes_y", "hora_y"]).y.mean()
-clim_c_te = clim_cc.reindex(pd.MultiIndex.from_arrays([TE_c.est, TE_c.mes_y, TE_c.hora_y])).to_numpy()
-clim_c_te = np.where(np.isnan(clim_c_te), TR_c.y.mean(), clim_c_te)
-modelos_c = {"Persistencia 24 h": pers_c, "Climatología estación × mes × hora": clim_c_te}
-for nombre, F in [("SVR solo velocidad", F_UNI), ("SVR + meteorología + espacial", F_ESP)]:
-    modelos_c[nombre] = svr(C_C, LOG_C).fit(TR_c[F], TR_c.y).predict(TE_c[F])
-resultados_c = pd.DataFrame({k: metricas(y_c, v, pers_c, est_c) for k, v in modelos_c.items()}).T
-pred_c = modelos_c["SVR + meteorología + espacial"]
-ic_c = bootstrap_dias(y_c, pred_c, pers_c, TE_c.t)
-ic_c.columns = ["IC 2.5 %", "IC 97.5 %"]
-ic_c.insert(0, "estimación", [r2_score(y_c, pred_c), np.sqrt(mean_squared_error(y_c, pred_c)),
-                              mean_absolute_error(y_c, pred_c), resultados_c.loc["SVR + meteorología + espacial",
-                                                                                 "Mejora vs. persistencia"]])
-print("Prueba 2025 con limpieza causal:")
-display(resultados_c)
-print("IC 95 % (bootstrap de bloques de 7 días), SVR completo con limpieza causal:")
-ic_c
-
-# %% [markdown]
-# **Comparación con el procesamiento original.** Primero las dos evaluaciones tal como salen (cada una
-# con su población de prueba); después, solo sobre las **observaciones comunes** (misma estación y
-# hora), para separar un cambio real de desempeño de un cambio en la población evaluada.
-
-# %%
+pred_o = svr(C_OPT, LOG_OPT).fit(TR_o[F_ESP], TR_o.y).predict(TE_o[F_ESP])
 comp = pd.DataFrame({
-    "original (depuración retrospectiva)": {"filas de prueba": len(TE), "estaciones de prueba": TE.est.nunique(),
-                                            **metricas(y_te, pred_te, pers_te, TE.est.to_numpy())},
-    "causal (sin información futura)": {"filas de prueba": len(TE_c), "estaciones de prueba": TE_c.est.nunique(),
-                                        **metricas(y_c, pred_c, pers_c, est_c)},
+    "original (depuración retrospectiva)": {"filas de prueba": len(TE_o), "estaciones de prueba": TE_o.est.nunique(),
+                                            **metricas(TE_o.y.to_numpy(), pred_o, TE_o.vel_l0.to_numpy(), TE_o.est.to_numpy())},
+    "causal (principal)": {"filas de prueba": len(TE), "estaciones de prueba": TE.est.nunique(),
+                           **metricas(y_te, pred_te, pers_te, TE.est.to_numpy())},
 }).T
 display(comp)
 
-o = TE[["est", "t", "y", "vel_l0"]].assign(pred=pred_te)
-c = TE_c[["est", "t", "y", "vel_l0"]].assign(pred=pred_c)
-com = o.merge(c, on=["est", "t"], suffixes=("_o", "_c"))
-mismo_y = np.isclose(com.y_o, com.y_c, atol=1e-6)
-print(f"Filas comunes: {len(com):,} ({100 * len(com) / len(TE):.1f} % de la prueba original y "
-      f"{100 * len(com) / len(TE_c):.1f} % de la causal); estaciones comunes: {com.est.nunique()}")
-print(f"Filas solo en la original: {len(TE) - len(com):,} | solo en la causal: {len(TE_c) - len(com):,}")
-print(f"Filas comunes con el mismo valor objetivo en ambos procesamientos: {100 * mismo_y.mean():.1f} %")
-cm = com[mismo_y]
-comunes = pd.DataFrame({
-    "modelo original": metricas(cm.y_o.to_numpy(), cm.pred_o.to_numpy(), cm.vel_l0_o.to_numpy(), cm.est.to_numpy()),
-    "modelo causal": metricas(cm.y_c.to_numpy(), cm.pred_c.to_numpy(), cm.vel_l0_c.to_numpy(), cm.est.to_numpy()),
-}).T
-dif, lo_, hi_ = diferencia_pareada(cm.y_c.to_numpy(), cm.pred_c.to_numpy(), cm.pred_o.to_numpy(), cm.t)
-print(f"Sobre las filas comunes con el mismo objetivo ({len(cm):,}): RMSE(causal) − RMSE(original) = "
-      f"{dif:+.4f} m/s (IC 95 %: {lo_:+.4f} a {hi_:+.4f})")
-comunes
+
+def comparar_comunes(TE_a, pred_a, TE_b, pred_b, nombre_a, nombre_b):
+    a = TE_a[["est", "t", "y", "vel_l0"]].assign(pred=pred_a)
+    b = TE_b[["est", "t", "y", "vel_l0"]].assign(pred=pred_b)
+    com = a.merge(b, on=["est", "t"], suffixes=("_a", "_b"))
+    igual = np.isclose(com.y_a, com.y_b, atol=1e-6)
+    print(f"Filas comunes: {len(com):,} ({100 * len(com) / len(TE_a):.1f} % de {nombre_a} y "
+          f"{100 * len(com) / len(TE_b):.1f} % de {nombre_b}); con el mismo objetivo: {100 * igual.mean():.1f} %")
+    cm = com[igual]
+    dif, lo_, hi_ = diferencia_pareada(cm.y_b.to_numpy(), cm.pred_b.to_numpy(), cm.pred_a.to_numpy(), cm.t)
+    print(f"Sobre esas {len(cm):,} filas: RMSE({nombre_b}) − RMSE({nombre_a}) = {dif:+.4f} m/s "
+          f"(IC 95 %: {lo_:+.4f} a {hi_:+.4f})")
+    return pd.DataFrame({
+        nombre_a: metricas(cm.y_a.to_numpy(), cm.pred_a.to_numpy(), cm.vel_l0_a.to_numpy(), cm.est.to_numpy()),
+        nombre_b: metricas(cm.y_b.to_numpy(), cm.pred_b.to_numpy(), cm.vel_l0_b.to_numpy(), cm.est.to_numpy())}).T
+
+
+comparar_comunes(TE_o, pred_o, TE, pred_te, "original", "causal")
 
 # %% [markdown]
-# **Interpretación.** 
+# **Criterio alternativo de temperatura.** El modelado usa el criterio general de sensor defectuoso,
+# fijado antes de ver 2025 (cualquier lectura fuera de [3, 45] °C). Como sensibilidad, se reprocesó la
+# temperatura con el criterio de la depuración original, adoptado después de ver 2025 (contar solo
+# lecturas > 45 °C), y se repitió el ajuste y la prueba.
+
+# %%
+_, _, D_alt = preparar_panel(DATOS / "panel_multivariado_causal_temp_alt.csv")
+TR_alt, TE_alt = D_alt[D_alt.t_y < TEST_INI], D_alt[D_alt.t >= TEST_INI]
+pred_alt = svr(C_OPT, LOG_OPT).fit(TR_alt[F_ESP], TR_alt.y).predict(TE_alt[F_ESP])
+display(pd.DataFrame({
+    "causal, temperatura: fuera de [3, 45] °C, fijado antes de 2025 (principal)": {
+        "filas de prueba": len(TE), "estaciones de prueba": TE.est.nunique(),
+        **metricas(y_te, pred_te, pers_te, TE.est.to_numpy())},
+    "causal, temperatura: solo > 45 °C, fijado viendo 2025": {
+        "filas de prueba": len(TE_alt), "estaciones de prueba": TE_alt.est.nunique(),
+        **metricas(TE_alt.y.to_numpy(), pred_alt, TE_alt.vel_l0.to_numpy(), TE_alt.est.to_numpy())},
+}).T)
+comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "criterio principal")
+
+# %% [markdown]
+# **Interpretación.**
 #
-# * **Validación cruzada causal:** con cada pliegue limpiado solo con su pasado, la configuración
-#   elegida es la misma (sin transformar el objetivo; C no influye) y la mejora media sobre la
-#   persistencia en 2021–2024 es del 13 %.
-# * **Prueba 2025 sin información futura:** R² = 0.737 (IC 95 %: 0.713–0.755), RMSE = 0.733 m/s
-#   (0.711–0.761) y **mejora de 13.2 % sobre la persistencia (IC 95 %: 12.2–14.3 %)**. La persistencia
-#   obtiene R² = 0.650.
-# * **Cambio de población:** la limpieza causal evalúa 215 763 filas en 53 estaciones, frente a 210 859
-#   filas en 51 estaciones con la original. Las diferencias vienen de que ya no se excluyen estación-años
-#   completos, de que los tramos pegados solo se enmascaran desde que cumplen su plazo y de que los
-#   sensores se promedian. El 99.9 % de las filas originales está en la prueba causal.
-# * **Sobre las observaciones comunes con el mismo valor objetivo** (181 826 filas, el 86 % de las
-#   comunes), la diferencia de RMSE entre el modelo causal y el original es de +0.0001 m/s, con un
-#   intervalo que incluye el 0 (−0.0001 a +0.0002): **el desempeño no cambia**. Las diferencias agregadas
-#   (R² 0.737 frente a 0.739) se deben al cambio de población, no a un peor modelo.
-# * **Conclusión:** la limpieza retrospectiva no inflaba el resultado. A partir de aquí, **las métricas
-#   de referencia del modelo base son las de esta sección**, obtenidas sin información futura en ninguna
-#   etapa. Los análisis de las secciones 3.2 a 3.5 (estaciones nuevas, bloques geográficos, vientos
-#   fuertes, residuos, curva de aprendizaje) se hicieron con el procesamiento original; dado que sobre
-#   las mismas observaciones ambos modelos rinden igual, no se espera que sus conclusiones cambien, pero
-#   no se repitieron con el panel causal.
+# * **Procesamiento original frente al causal:** la limpieza causal evalúa 213 972 filas en 53
+#   estaciones, frente a 210 859 en 51 con la original, porque ya no se excluyen estación-años completos,
+#   los tramos pegados solo se enmascaran desde que cumplen su plazo y los sensores se promedian. Las
+#   métricas agregadas son casi iguales (R² 0.737 frente a 0.739; la misma mejora del 13.2 %). Sobre las
+#   180 779 observaciones comunes con el mismo valor objetivo, la diferencia de RMSE es de −0.0002 m/s
+#   (IC 95 %: −0.0003 a −0.0001): estadísticamente distinguible de cero, pero de tamaño despreciable. **No
+#   se encontró una diferencia apreciable** entre los dos procesamientos en esta comparación; la pequeña
+#   diferencia de R² agregado se debe al cambio en la población evaluada.
+# * **Criterio de temperatura:** con el criterio adoptado después de ver 2025, las métricas son
+#   prácticamente idénticas (diferencia de RMSE de 0.0002 m/s sobre las mismas 213 972 filas). Por eso el
+#   modelado usa el criterio fijado antes de ver 2025, y la decisión tomada mirando el periodo de prueba no
+#   influye en los resultados reportados.
 #
 # ## 3.7 Nota crítica
 #
-# El R² en prueba sin información futura (0.737, sección 3.6) queda por debajo de la zona de alerta del
+# El R² en prueba sin información futura (0.737, sección 3.2) queda por debajo de la zona de alerta del
 # 80–90 %. Aun así, se verificó lo que pide la nota:
 #
 # 1. **Fuga de datos:** ninguna predictora usa información posterior a la hora t, la última completa
 #    al emitir el pronóstico (2.5). Una fuga deliberada da un síntoma muy distinto (R² = 0.85 con una
 #    sola variable). La depuración original sí usaba información del año completo (1.6); por eso todo el
 #    modelado se repitió con una **limpieza causal** en la que cada lectura se limpia solo con su pasado
-#    (3.6). El resultado es prácticamente el mismo (R² 0.737; mejora del 13.2 %) y, sobre las mismas
-#    observaciones, la diferencia es nula. El único umbral fijado después de ver 2025 es el criterio de
-#    sensor defectuoso de la temperatura (1.6).
+#    (sección 3). Ningún umbral del modelado se fijó viendo 2025 (1.6). Sobre las mismas observaciones,
+#    no se encontró una diferencia apreciable con el procesamiento original (3.6).
 # 2. **Comparación con la línea base trivial:** la persistencia ya logra R² = 0.65; el aporte real del
 #    modelo es la mejora del 13 % en RMSE (IC 95 %: 12–14 %), no el R² absoluto.
 # 3. **Estructura temporal y espacial:** la partición es por años completos, y la generalización se
@@ -1998,9 +1952,10 @@ comunes
 # 2. El EDA muestra que el viento tiene **ciclos diario y anual fuertes**, un **gradiente espacial**
 #    marcado (hotspot en La Guajira) y **dependencia temporal y espacial**, lo que obliga a validar por
 #    años completos y por estación.
-# 3. Con una limpieza **sin información futura** (sección 3.6), el **SVR lineal** pronostica la velocidad
+# 3. Con una limpieza **sin información futura** (sección 3), el **SVR lineal** pronostica la velocidad
 #    a 24 h con R² = 0.737 (IC 95 %: 0.71–0.76) y mejora a la persistencia en un 13.2 % (IC 95 %:
-#    12–14 %). El resultado coincide con el del procesamiento original, y la mejora es estable también en estaciones que no se usaron para ajustarlo. Las variables meteorológicas aportan poco a un
+#    12–14 %). No se encontró una diferencia apreciable con el procesamiento original, y la mejora se
+#    mantiene en estaciones que no se usaron para ajustarlo y en bloques geográficos con separación. Las variables meteorológicas aportan poco a un
 #    modelo lineal, aunque su información mutua con el objetivo sugiere relaciones no lineales.
 # 4. Los residuos conservan estructura temporal, espacial y heterocedástica, y la curva de aprendizaje
 #    indica sesgo alto. El proyecto final debe probar **modelos no lineales** (árboles, boosting, redes)
@@ -2010,9 +1965,9 @@ comunes
 # un año a otro y está sesgada hacia las tierras bajas; (iii) el análisis usa casos completos, así que
 # excluye las estaciones sin sensor de presión o de temperatura; (iv) el R² global depende del conjunto
 # de estaciones de cada año, por lo que siempre se reporta junto con el R² por estación y la mejora
-# sobre la persistencia; (v) el EDA y los análisis de las secciones 3.2–3.5 usan la depuración original,
-# que es retrospectiva; la evaluación principal (3.6) usa la limpieza causal, y el criterio de sensor
-# defectuoso de la temperatura se fijó después de ver 2025; (vi) la hora local es un supuesto
+# sobre la persistencia; (v) el EDA usa la depuración original, que es retrospectiva y en temperatura
+# incluye un criterio fijado después de ver 2025; todo el modelado (sección 3) usa la limpieza causal, con
+# umbrales fijados antes de ver 2025; (vi) la hora local es un supuesto
 # respaldado por el ciclo diario, no documentado por la fuente; (vii) la anticipación real desde la emisión es de 23 h hasta el inicio de la hora
 # objetivo.
 

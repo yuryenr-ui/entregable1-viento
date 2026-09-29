@@ -24,7 +24,7 @@ análisis exploratorio (EDA) y modelo base.
    mkdir ../ideam_viento
    cd ../ideam_viento
    python ../entregable1/scripts/procesar_todo.py "<carpeta de descargas>"
-   python ../entregable1/scripts/procesar_todo.py "<carpeta de descargas>" --causal
+   python ../entregable1/scripts/procesar_todo.py "<carpeta de descargas>" --causal   # panel del modelado y sensibilidad
    python ../entregable1/scripts/verificar_conteo.py "<carpeta de descargas>"
    ```
 
@@ -34,7 +34,7 @@ análisis exploratorio (EDA) y modelo base.
 4. Ejecutar `entregable1.ipynb` con las versiones de `requirements.txt` (semilla fija: 42).
 
 **Nota metodológica:** el EDA usa la depuración original, que es retrospectiva (control de calidad con
-información de la estación-año completa). La evaluación principal del modelo (sección 3.6) usa una
+información de la estación-año completa). Todo el modelado (sección 3) usa una
 limpieza causal (`--causal`), en la que cada lectura se limpia solo con información anterior a ella.
 
 Límites departamentales del mapa base: [geoBoundaries](https://www.geoboundaries.org) (fuente

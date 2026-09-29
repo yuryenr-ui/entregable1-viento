@@ -4,7 +4,8 @@ Uso: python procesar_todo.py "C:/Users/USER/Downloads/DATA SET PROPIO" [--causal
 Busca los CSV de cada variable en su subcarpeta; basta con agregar archivos nuevos y volver a ejecutar.
 Sin opciones aplica la limpieza original (retrospectiva, procesar_variable.py). Con --causal aplica la
 limpieza causal (procesar_variable_causal.py), que solo usa información anterior a cada lectura, y
-escribe panel_multivariado_causal.csv. Los resultados se escriben en la carpeta desde la que se ejecuta.
+escribe panel_multivariado_causal.csv y, para la sensibilidad de la sección 3.6,
+panel_multivariado_causal_temp_alt.csv. Los resultados se escriben en la carpeta desde la que se ejecuta.
 """
 import subprocess
 import sys
@@ -30,3 +31,11 @@ for var, sub in carpetas.items():
         subprocess.run(comando, stdout=log, stderr=log, check=True)
 
 subprocess.run([sys.executable, str(aqui / "unir_panel.py"), str(catalogo)] + (["--causal"] if CAUSAL else []), check=True)
+
+if CAUSAL:  # sensibilidad de la sección 3.6: temperatura con el criterio "solo > 45 °C"
+    archivos = sorted(str(f) for f in (raiz / "TEMPERATURA").glob("*.csv"))
+    print("temperatura (sensibilidad) → panel_temperatura_causal_alt.csv", flush=True)
+    with open("log_temperatura_causal_alt.txt", "w", encoding="utf-8") as log:
+        subprocess.run([sys.executable, str(aqui / "procesar_variable_causal.py"), "temperatura", str(catalogo),
+                        *archivos, "--temp-solo-altas"], stdout=log, stderr=log, check=True)
+    subprocess.run([sys.executable, str(aqui / "unir_panel.py"), str(catalogo), "--causal", "--temp-alt"], check=True)
