@@ -1,7 +1,7 @@
-umbral (m/s),estaciones,lecturas eliminadas,estaciones distintas,% picos aislados,mediana de las lecturas vecinas (m/s)
-20,Galerazamba o Mongui,7677,2,5.3,41.4
-20,otras estaciones,456,22,51.1,14.3
-25,Galerazamba o Mongui,6290,2,6.0,44.2
-25,otras estaciones,331,21,62.8,4.8
-30,Galerazamba o Mongui,4823,2,6.3,44.8
-30,otras estaciones,261,19,58.6,10.9
+umbral (m/s),estaciones,lecturas eliminadas,estaciones distintas,% con vecinas a ≤ 2 pasos,% picos aislados,mediana de las lecturas vecinas (m/s)
+20,Galerazamba o Mongui,7677,2,87.8,4.0,41.4
+20,otras estaciones,456,22,94.7,47.8,14.3
+25,Galerazamba o Mongui,6290,2,91.0,4.6,44.2
+25,otras estaciones,331,21,93.4,58.9,4.8
+30,Galerazamba o Mongui,4823,2,95.7,4.9,44.8
+30,otras estaciones,261,19,92.0,54.0,10.9

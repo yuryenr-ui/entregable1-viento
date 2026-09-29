@@ -7,20 +7,28 @@
 # Este informe cubre las tres partes del primer entregable: (1) la base de datos, (2) el análisis
 # exploratorio (EDA) y (3) un modelo base comparado contra líneas base triviales.
 #
-# **Reproducibilidad.** El notebook parte del panel ya procesado (`panel_multivariado.csv`). Ese panel
-# se genera a partir de los 24 CSV originales del IDEAM con los scripts de la carpeta `ideam_viento/`:
+# **Reproducibilidad.** El notebook parte del panel ya procesado (`panel_multivariado.csv`), que se
+# genera a partir de los 24 CSV originales del IDEAM con los scripts de `scripts/`. Los scripts escriben
+# sus resultados en la carpeta desde la que se ejecutan, y el notebook los busca en la carpeta hermana
+# `../ideam_viento/`. Desde la carpeta de este repositorio:
 #
 # ```
-# python procesar_todo.py "<carpeta con los CSV descargados>"   # auditoría + panel por variable + unión
-# python verificar_conteo.py "<carpeta con los CSV descargados>" # conteo independiente sobre los crudos
+# mkdir ../ideam_viento
+# cd ../ideam_viento
+# python ../entregable1/scripts/procesar_todo.py "<carpeta con los CSV descargados>"
+# python ../entregable1/scripts/verificar_conteo.py "<carpeta con los CSV descargados>"
 # ```
 #
 # `procesar_todo.py` ejecuta `procesar_variable.py` (limpieza de cada variable) y `unir_panel.py`
-# (unión con el catálogo) y escribe los reportes de auditoría que usa la sección 1.6. Todas las
+# (unión con el catálogo) y escribe el panel y los reportes de auditoría que usa la sección 1.6. Para
+# usar otra carpeta, se define la variable de entorno `DATOS_PANEL` antes de abrir el notebook. La tabla de
+# umbrales de la sección 1.6 se genera con `python scripts/revisar_umbral.py "<carpeta VELOCIDAD DEL
+# VIENTO>"` desde la carpeta del repositorio. Todas las
 # semillas están fijadas (42) y las versiones de las librerías están en `requirements.txt`.
 
 # %%
 import json
+import os
 import re
 import unicodedata
 import warnings
@@ -63,7 +71,9 @@ plt.rcParams["figure.dpi"] = 110
 pd.set_option("display.float_format", "{:.3f}".format)
 pd.set_option("display.max_columns", 30)
 
-DATOS = Path("../ideam_viento")
+# carpeta con el panel y las auditorías generados por scripts/procesar_todo.py; por defecto, la carpeta
+# hermana ideam_viento/ (ver "Reproducibilidad"); se puede cambiar con la variable de entorno DATOS_PANEL
+DATOS = Path(os.environ.get("DATOS_PANEL", "../ideam_viento"))
 TEST_INI = pd.Timestamp("2025-01-01")  # conjunto de prueba reservado: todo 2025
 H = 24                                 # horizonte de pronóstico (horas)
 K_VECINOS = 4                          # vecinos para el rezago espacial y las matrices de pesos
@@ -325,12 +335,13 @@ excl.sort_values(["variable", "anio"])
 # * La gran mayoría de las lecturas de velocidad por encima de 25 m/s vienen de dos sensores con fallas
 #   evidentes (Galerazamba y Mongui), que además tienen saltos bruscos y tramos de 0 constante durante
 #   meses.
-# * En las demás estaciones, la mayoría de las lecturas eliminadas son **picos aislados**: superan en
-#   más de 15 m/s a la mediana de la lectura anterior y la siguiente (10 o 2 minutos antes y después).
-#   Un salto así, ida y vuelta, no es compatible con un viento medio real. El resto no se puede clasificar
-#   con certeza, pero son del orden de un centenar de lecturas entre 30 millones.
-# * **Sensibilidad al umbral:** pasar de 25 a 30 m/s solo conservaría unas 70 lecturas más fuera de los
-#   sensores dañados, así que la elección entre esos valores no cambia el panel de forma apreciable.
+# * En las demás estaciones, el 93 % de las lecturas eliminadas tiene su lectura anterior y la siguiente
+#   a no más de dos pasos de muestreo (se comprobó la diferencia de tiempo), y el 59 % son **picos
+#   aislados**: superan en más de 15 m/s a la mediana de esas dos vecinas. Un salto de ese tamaño que
+#   aparece y desaparece en pocos minutos es un **indicio** de anomalía del sensor, no una prueba
+#   definitiva. El resto de las lecturas eliminadas no se puede clasificar con certeza.
+# * **Sensibilidad al umbral:** entre 25 y 30 m/s la diferencia es de unas 70 lecturas crudas fuera de
+#   los sensores dañados. No se evaluó cómo cambiarían el panel horario ni las métricas con otro umbral.
 # * En temperatura, las lecturas por encima de 45 °C aparecen en sensores concretos que repiten
 #   exactamente el mismo valor máximo (50.0 °C), un patrón compatible con un tope del sensor más que
 #   con temperaturas reales. No se pudo confirmar con la ficha técnica del instrumento, así que se
@@ -1653,9 +1664,9 @@ sens_limp
 # esa exclusión**; no demuestra que la limpieza retrospectiva no introduzca ningún sesgo ni equivale a
 # una simulación operativa, porque la frecuencia de muestreo y la elección del sensor también usan el
 # año completo. Reconstruir todo el procesamiento solo con información pasada queda como trabajo
-# pendiente. En conjunto, las reglas
-# retrospectivas afectan al 2.1 % de las lecturas auditadas (0.5 % en estación-años excluidas y 1.7 % en
-# tramos pegados o picos), sobre todo de dirección del viento.
+# pendiente. Las dos reglas retrospectivas cuantificables (exclusión de estación-años y
+# tramos pegados o picos) afectan, sin contar dos veces las lecturas que caen en ambas, al 2.01 % de las
+# lecturas auditadas, sobre todo de dirección del viento.
 
 # %% [markdown]
 # ## 3.3 Diagnóstico de residuos
@@ -1797,7 +1808,10 @@ coef.to_frame("coeficiente").T
 #
 # 1. **Fuga de datos:** ninguna predictora usa información posterior a la hora t, la última completa
 #    al emitir el pronóstico (2.5). Una fuga deliberada da un síntoma muy distinto (R² = 0.85 con una
-#    sola variable).
+#    sola variable). **Pero la depuración de los datos sí usa información del año completo** (1.6): las
+#    métricas corresponden a una evaluación sobre datos depurados retrospectivamente, no a una
+#    simulación en la que todo el proceso usa solo información pasada. La prueba de sensibilidad de la
+#    sección 3.2 indica que el resultado es estable, pero no elimina esta limitación.
 # 2. **Comparación con la línea base trivial:** la persistencia ya logra R² = 0.65; el aporte real del
 #    modelo es la mejora del 13 % en RMSE, no el R² absoluto.
 # 3. **Estructura temporal y espacial:** la partición es por años completos, y la generalización se
@@ -1819,8 +1833,8 @@ coef.to_frame("coeficiente").T
 # 2. El EDA muestra que el viento tiene **ciclos diario y anual fuertes**, un **gradiente espacial**
 #    marcado (hotspot en La Guajira) y **dependencia temporal y espacial**, lo que obliga a validar por
 #    años completos y por estación.
-# 3. El **SVR lineal** pronostica la velocidad a 24 h con R² = 0.74 y mejora a la persistencia en un
-#    13 % de forma estable, también en estaciones que no se usaron para ajustarlo. Las variables meteorológicas aportan poco a un
+# 3. Sobre datos **depurados retrospectivamente** (sección 1.6), el **SVR lineal** pronostica la
+#    velocidad a 24 h con R² = 0.74 y mejora a la persistencia en un 13 % de forma estable, también en estaciones que no se usaron para ajustarlo. Las variables meteorológicas aportan poco a un
 #    modelo lineal, aunque su información mutua con el objetivo sugiere relaciones no lineales.
 # 4. Los residuos conservan estructura temporal, espacial y heterocedástica, y la curva de aprendizaje
 #    indica sesgo alto. El proyecto final debe probar **modelos no lineales** (árboles, boosting, redes)

@@ -17,10 +17,24 @@ análisis exploratorio (EDA) y modelo base.
 1. Descargar los CSV de datos.gov.co (enlaces en la sección 1.3 del entregable), uno por variable y año,
    en subcarpetas `VELOCIDAD DEL VIENTO`, `DIRECCION DEL VIENTO`, `TEMPERATURA`, `PRESION` y
    `CATALOGO estaciones`.
-2. Generar el panel con `python scripts/procesar_todo.py "<carpeta de descargas>"` (produce
-   `panel_multivariado.csv` y los reportes de auditoría). `scripts/verificar_conteo.py` hace un conteo
-   independiente sobre los archivos crudos.
-3. Ejecutar `entregable1.ipynb` con las versiones de `requirements.txt` (semilla fija: 42).
+2. Generar el panel en la carpeta hermana `ideam_viento/`, que es donde lo busca el notebook (los
+   scripts escriben en la carpeta desde la que se ejecutan):
+
+   ```
+   mkdir ../ideam_viento
+   cd ../ideam_viento
+   python ../entregable1/scripts/procesar_todo.py "<carpeta de descargas>"
+   python ../entregable1/scripts/verificar_conteo.py "<carpeta de descargas>"
+   ```
+
+   Para usar otra carpeta, definir la variable de entorno `DATOS_PANEL` con su ruta.
+3. Desde la carpeta del repositorio, `python scripts/revisar_umbral.py "<carpeta VELOCIDAD DEL VIENTO>"`
+   genera `resultados/umbral_velocidad.csv`.
+4. Ejecutar `entregable1.ipynb` con las versiones de `requirements.txt` (semilla fija: 42).
+
+**Nota metodológica:** la depuración de los datos usa información del año completo (control de calidad
+retrospectivo), así que las métricas del modelo corresponden a una evaluación sobre datos depurados
+retrospectivamente. Ver las secciones 1.6 y 3.2 del entregable.
 
 Límites departamentales del mapa base: [geoBoundaries](https://www.geoboundaries.org) (fuente
 OpenStreetMap, licencia ODbL 1.0).
