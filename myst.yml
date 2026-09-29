@@ -3,9 +3,8 @@ version: 1
 project:
   title: Pronóstico de la velocidad del viento a 24 h en el Caribe colombiano
   authors:
-    - name: Yuryen
-    - name: Betzaida
-    - name: Mario
+    - name: Yuryen Rollo
+    - name: Betzaida Ruiz
   license: CC-BY-4.0
   toc:
     - file: index.md

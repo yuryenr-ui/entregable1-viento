@@ -1,6 +1,6 @@
 # Pronóstico de la velocidad del viento a 24 h en el Caribe colombiano
 
-**Curso:** Machine Learning · **Profesor:** Lihki Rubio Ortega · **Grupo:** Yuryen, Betzaida, Mario
+**Curso:** Machine Learning · **Profesor:** Lihki Rubio Ortega · **Grupo:** Yuryen Rollo, Betzaida Ruiz
 
 Este libro contiene el **Entregable 1** del proyecto de investigación: selección de la base de datos,
 análisis exploratorio (EDA) y modelo base.

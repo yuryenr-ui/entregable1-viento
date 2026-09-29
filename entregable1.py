@@ -2,7 +2,7 @@
 # # Entregable 1 — Pronóstico de la velocidad del viento a 24 horas en el Caribe colombiano
 #
 # **Curso:** Machine Learning · **Profesor:** Lihki Rubio Ortega
-# **Grupo:** Yuryen, Betzaida, Mario
+# **Grupo:** Yuryen Rollo, Betzaida Ruiz
 #
 # Este informe cubre las tres partes del primer entregable: (1) la base de datos, (2) el análisis
 # exploratorio (EDA) y (3) un modelo base comparado contra líneas base triviales.
