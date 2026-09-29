@@ -1,0 +1,14 @@
+# Jupyter Book 2 (MyST). Construir localmente: jupyter-book build --html  (requiere Node.js)
+version: 1
+project:
+  title: Pronóstico de la velocidad del viento a 24 h en el Caribe colombiano
+  authors:
+    - name: Yuryen
+    - name: Betzaida
+    - name: Mario
+  license: CC-BY-4.0
+  toc:
+    - file: index.md
+    - file: entregable1.ipynb
+site:
+  template: book-theme
