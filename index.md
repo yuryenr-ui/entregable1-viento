@@ -7,7 +7,7 @@ análisis exploratorio (EDA) y modelo base.
 
 - **Datos:** estaciones automáticas del IDEAM publicadas en el Portal Nacional de Datos Abiertos
   (datos.gov.co): velocidad y dirección del viento, temperatura del aire y presión atmosférica,
-  7 departamentos del Caribe, 2020–2025.
+  7 departamentos del Caribe, 2020–2025. Licencia: CC BY-SA 4.0, atribución al IDEAM.
 - **Problema:** pronosticar la velocidad media horaria del viento 24 horas después de la última hora
   observada.
 - **Modelo base:** SVR lineal, comparado con persistencia, climatología y un modelo de media.

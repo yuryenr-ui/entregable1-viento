@@ -192,7 +192,11 @@ def moran_perm(z, W, n=999, rng=RNG):
 #
 # * **Filtros de descarga:** departamentos Atlántico, Bolívar, Cesar, Córdoba, La Guajira, Magdalena y
 #   Sucre; años 2020 a 2025; un archivo CSV por variable y año (24 archivos, ≈ 6.4 GB).
-# * **Licencia:** datos abiertos del Portal Nacional de Datos Abiertos, Ley 1712 de 2014.
+# * **Licencia:** los cinco conjuntos están publicados bajo **Creative Commons Atribución-CompartirIgual
+#   4.0 Internacional (CC BY-SA 4.0)**, con atribución al Instituto de Hidrología, Meteorología y Estudios
+#   Ambientales (IDEAM), según los metadatos de cada conjunto en datos.gov.co
+#   (https://creativecommons.org/licenses/by-sa/4.0/). Se publican como datos abiertos en el marco de la
+#   Ley 1712 de 2014. Por la cláusula "CompartirIgual", este informe se publica con la misma licencia.
 # * **Advertencia de la fuente:** según la ficha del portal, *"los datos … no han sido validados por el
 #   IDEAM"*: son datos crudos de sensores automáticos. Por eso se aplicó un control de calidad propio
 #   (sección 1.6).
