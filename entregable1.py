@@ -355,10 +355,10 @@ excl.sort_values(["variable", "anio"])
 # **Independencia de la validación respecto de los umbrales.** "Fijado antes de ver 2025" no equivale a
 # "fijado antes de cada pliegue de validación": varios umbrales se eligieron viendo datos de 2020–2023
 # (tabla anterior), así que los pliegues de validación de 2021, 2022 y 2023 no son independientes de esa
-# elección. Por eso **los hiperparámetros se eligen solo con el pliegue de 2024** (entrenamiento 2020–2023,
-# validación 2024), que junto con la prueba de 2025 es independiente de todos los umbrales del modelado;
-# los pliegues 2021–2023 se muestran solo como referencia (sección 3.1). La curva de aprendizaje también
-# valida en 2024.
+# elección. Por eso **la configuración del modelo se elige con una validación cruzada de 4 pliegues
+# cronológicos dentro de 2024** (sección 3.1): esos datos, igual que la prueba de 2025, no se vieron al
+# fijar ningún umbral de limpieza. Los pliegues por años 2021–2023 se muestran solo como referencia. La
+# curva de aprendizaje también valida en 2024.
 #
 # **Justificación de los umbrales.** Los umbrales se eligieron para esta red a partir de la propia
 # auditoría, no como límites físicos universales. Para no justificar la limpieza con los datos ya
@@ -1521,13 +1521,17 @@ print(f"Conjunto de modelado causal: {len(D):,} filas | entrenamiento {len(TR):,
 # %% [markdown]
 # ## 3.1 Validación cruzada temporal en entrenamiento
 #
-# Pliegues expansivos por años completos: se entrena con los años anteriores y se valida con el
-# siguiente (2021, 2022, 2023, 2024). El filtro por la fecha del objetivo evita que un objetivo de
-# entrenamiento caiga en el año de validación (equivale a un *gap* de 24 h).
+# **Validación cruzada para elegir la configuración: 4 pliegues cronológicos dentro de 2024.** Los
+# umbrales de limpieza se fijaron viendo datos de hasta 2023 (sección 1.6), así que los datos de
+# validación deben ser posteriores. Cada trimestre de 2024 se valida entrenando con todo lo anterior
+# (2020–2023 y los trimestres previos de 2024): ventana creciente. El filtro por la fecha del objetivo
+# (el objetivo de entrenamiento siempre es anterior al inicio del trimestre) equivale a una separación
+# de 24 h, y el escalado se ajusta dentro del `Pipeline` en cada entrenamiento. La configuración elegida
+# es la de menor RMSE medio en los 4 trimestres.
 #
-# **La configuración se elige solo con el pliegue de 2024** (entrenamiento 2020–2023, validación 2024):
-# es el único pliegue de validación independiente de todos los umbrales de limpieza, porque ninguno se
-# fijó viendo 2024 (sección 1.6). Los pliegues de 2021–2023 se muestran como referencia de estabilidad.
+# **Referencia de estabilidad:** también se muestran pliegues por años completos (validación en 2021,
+# 2022, 2023 y 2024). No se usan para elegir la configuración, porque los años 2021–2023 se vieron al
+# fijar algunos umbrales.
 
 # %%
 def svr(C=0.1, log=False):
@@ -1542,23 +1546,38 @@ def pliegues(datos):
         yield a, datos[datos.t_y < f"{a}-01-01"], datos[(datos.t >= f"{a}-01-01") & (datos.t_y < f"{a + 1}-01-01")]
 
 
-cv = []
-for log in [False, True]:
-    for C in [0.01, 0.1, 1.0]:
-        for a, tr, va in pliegues(TR):
-            rm = np.sqrt(mean_squared_error(va.y, svr(C, log).fit(tr[F_ESP], tr.y).predict(va[F_ESP])))
-            cv.append({"log(1+y)": log, "C": C, "año validación": a, "RMSE": rm,
-                       "RMSE persistencia": np.sqrt(mean_squared_error(va.y, va.vel_l0))})
-cv = pd.DataFrame(cv)
-cv["mejora"] = 1 - cv.RMSE / cv["RMSE persistencia"]
-tabla_cv = cv.pivot_table(index=["log(1+y)", "C"], columns="año validación", values="RMSE")
-tabla_cv["RMSE medio"] = tabla_cv.mean(axis=1)
-tabla_cv["mejora media vs. persistencia"] = cv.groupby(["log(1+y)", "C"]).mejora.mean()
-mejor = tabla_cv[2024].idxmin()  # solo el pliegue independiente de los umbrales de limpieza
-LOG_OPT, C_OPT = mejor
-print(f"Configuración elegida con el pliegue de validación 2024: log(1+y) = {LOG_OPT}, C = {C_OPT}")
-print(f"(con el RMSE medio de los 4 pliegues se elegiría la misma: {tabla_cv['RMSE medio'].idxmin() == mejor})")
-tabla_cv
+def pliegues_2024(datos):
+    """4 pliegues cronológicos (trimestres de 2024) con ventana de entrenamiento creciente."""
+    cortes = pd.to_datetime(["2024-01-01", "2024-04-01", "2024-07-01", "2024-10-01", "2025-01-01"])
+    for k in range(4):
+        ini, fin = cortes[k], cortes[k + 1]
+        yield f"2024-T{k + 1}", datos[datos.t_y < ini], datos[(datos.t >= ini) & (datos.t_y < fin)]
+
+
+def validar(generador):
+    filas = []
+    for log in [False, True]:
+        for C in [0.01, 0.1, 1.0]:
+            for nombre, tr, va in generador(TR):
+                rm = np.sqrt(mean_squared_error(va.y, svr(C, log).fit(tr[F_ESP], tr.y).predict(va[F_ESP])))
+                filas.append({"log(1+y)": log, "C": C, "pliegue": nombre, "RMSE": rm,
+                              "mejora": 1 - rm / np.sqrt(mean_squared_error(va.y, va.vel_l0))})
+    r = pd.DataFrame(filas)
+    t = r.pivot_table(index=["log(1+y)", "C"], columns="pliegue", values="RMSE")
+    t["RMSE medio"] = t.mean(axis=1)
+    t["mejora media vs. persistencia"] = r.groupby(["log(1+y)", "C"]).mejora.mean()
+    return t
+
+
+tabla_cv = validar(pliegues_2024)
+LOG_OPT, C_OPT = tabla_cv["RMSE medio"].idxmin()
+print(f"Configuración elegida (validación cruzada, 4 trimestres de 2024): log(1+y) = {LOG_OPT}, C = {C_OPT}")
+display(tabla_cv)
+tabla_cv_anual = validar(pliegues)
+print("Referencia de estabilidad, pliegues por años completos (no se usan para elegir): "
+      f"la configuración de menor RMSE medio sería log(1+y) = {tabla_cv_anual['RMSE medio'].idxmin()[0]}, "
+      f"C = {tabla_cv_anual['RMSE medio'].idxmin()[1]}")
+tabla_cv_anual
 
 # %% [markdown]
 # ## 3.2 Evaluación en el conjunto de prueba (2025)
@@ -1822,10 +1841,10 @@ coef.to_frame("coeficiente").T
 # %% [markdown]
 # **Interpretación** (todos los resultados de esta sección usan la limpieza causal).
 #
-# * **Validación cruzada:** la configuración elegida con el pliegue de 2024 es la misma que con el
-#   promedio de los cuatro pliegues. C no cambia el resultado (con n ≈ 400 000 la regularización pesa poco) y el
+# * **Validación cruzada:** la configuración elegida con los 4 trimestres de 2024 es la misma que se
+#   obtendría con los pliegues por años (referencia). C no cambia el resultado (con n ≈ 400 000 la regularización pesa poco) y el
 #   SVR da prácticamente lo mismo que `Ridge`, como se espera con esta pérdida. Transformar el objetivo
-#   con log(1 + y) empeora mucho el RMSE (mejora media sobre la persistencia de 1 % frente a 13 %), porque
+#   con log(1 + y) empeora mucho el RMSE (en los trimestres de 2024, mejora media sobre la persistencia de −0.2 % frente a 12.8 %), porque
 #   al devolver la predicción a m/s con la exponencial se amplifican los errores; por eso se usa el
 #   objetivo sin transformar.
 # * **Desempeño en 2025:** el SVR completo obtiene R² = 0.737 (IC 95 %: 0.713–0.756) y RMSE = 0.733 m/s
@@ -1985,7 +2004,8 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 # sobre la persistencia; (v) el EDA usa la depuración original, que es retrospectiva y en temperatura
 # incluye un criterio fijado después de ver 2025; todo el modelado (sección 3) usa la limpieza causal, con
 # umbrales fijados antes de ver 2025; como algunos se fijaron con datos de 2020–2023, los
-# hiperparámetros se eligen solo con el pliegue de 2024, y los pliegues 2021–2023 son solo referencia;
+# hiperparámetros se eligen con validación cruzada de 4 trimestres de 2024, y los pliegues por años
+# 2021–2023 son solo referencia;
 # (vi) la hora local es un supuesto
 # respaldado por el ciclo diario, no documentado por la fuente; (vii) la anticipación real desde la emisión es de 23 h hasta el inicio de la hora
 # objetivo.
