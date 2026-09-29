@@ -62,7 +62,7 @@ from statsmodels.stats.multitest import multipletests
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from statsmodels.tsa.seasonal import STL
 from statsmodels.tsa.stattools import acf, adfuller, kpss, pacf
-
+from IPython.display import display
 warnings.filterwarnings("ignore")
 SEED = 42
 np.random.seed(SEED)
