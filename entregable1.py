@@ -285,12 +285,14 @@ aud = pd.concat([pd.read_csv(DATOS / f"auditoria_{v}.csv", dtype={"CodigoEstacio
 excl = aud[aud.excluida][["variable", "CodigoEstacion", "NombreEstacion", "anio", "frac_fuera", "max_v", "motivo"]]
 print(f"Estación-año excluidas por sensor defectuoso: {len(excl)}")
 lect_total = aud.lecturas.sum()
+pegadas = aud.frac_pegado * aud.lecturas
 retro = pd.DataFrame({
-    "lecturas": [aud[aud.excluida].lecturas.sum(), (aud.frac_pegado * aud.lecturas).sum()],
+    "lecturas": [aud[aud.excluida].lecturas.sum(), pegadas.sum(), pegadas[aud.excluida].sum()],
 }, index=["en estación-años excluidas (proporción anual de anomalías)",
-          "en tramos pegados o picos de presión (tramo completo / mediana anual)"])
+          "en tramos pegados o picos de presión (tramo completo / mediana anual)",
+          "contadas en ambos grupos (pegadas dentro de estación-años excluidos)"])
+retro.loc["unión sin doble conteo"] = retro.lecturas.iloc[0] + retro.lecturas.iloc[1] - retro.lecturas.iloc[2]
 retro["% de las lecturas auditadas"] = 100 * retro.lecturas / lect_total
-retro.loc["total"] = retro.sum()
 print(f"Lecturas auditadas (después de quitar duplicados y filas fuera del Caribe): {lect_total:,.0f}")
 display(retro.round(3))
 altas = aud[aud.variable == "velocidad"].assign(n_fuera=lambda d: d.frac_fuera * d.lecturas)
@@ -345,7 +347,9 @@ excl.sort_values(["variable", "anio"])
 # proporción de lecturas anómalas para excluir un sensor), la detección de un tramo pegado completo
 # (que borra sus lecturas desde el inicio del tramo), la frecuencia de muestreo estimada con el archivo
 # completo y la elección del sensor con más horas del año. Es un control de calidad del archivo
-# histórico, no una simulación operativa. La celda siguiente cuantifica cuántas lecturas afecta, y la
+# histórico, no una simulación operativa. La celda siguiente cuantifica cuántas lecturas afectan las dos
+# reglas cuantificables (exclusión de estación-años y tramos pegados o picos); la elección del sensor y la
+# estimación de la frecuencia de muestreo no se pueden medir de la misma forma. La
 # sección 3.2 comprueba que el resultado es **estable** al excluir las estaciones de 2025 con
 # intervenciones retrospectivas. Esa comprobación no reemplaza a una reconstrucción de todo el
 # procesamiento con información exclusivamente pasada, que queda fuera del alcance de este entregable.
@@ -905,9 +909,13 @@ axs[2].set(title="Velocidad por día de la semana (0 = lunes)", xlabel="", ylabe
 fig.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Cambios de régimen, eventos y calendario.** Se buscan puntos de cambio en la anomalía mensual de la
-# red (velocidad mensual menos la media de ese mes en 2020–2024, con estaciones fijas para que no
-# influya el cambio de la red) con la prueba de Pettitt, y se superponen los eventos ENSO del periodo
+# **Cambios de régimen, eventos y calendario (análisis exploratorio).** La red cambia de un mes a otro,
+# así que un promedio simple de la red podría mostrar "cambios" que solo reflejan qué estaciones
+# reportaron. Para reducir ese efecto se calcula la **anomalía de cada estación respecto a su propia
+# climatología mensual** (su media de ese mes en 2020–2024) y luego se promedian las anomalías de las
+# estaciones presentes. Así, una estación ventosa que entra o sale de la red no desplaza el promedio.
+# Solo se usan meses con al menos 15 estaciones, y la composición de cada mes se muestra en el gráfico.
+# Sobre esa serie se aplica la prueba de Pettitt y se superponen los eventos ENSO del periodo
 # según el Índice Oceánico El Niño (ONI) de NOAA: **La Niña** de mediados de 2020 a inicios de 2023 y
 # **El Niño** de mediados de 2023 a mediados de 2024. Los feriados no se analizan por separado: el viento
 # es una variable física y el día de la semana no muestra ningún efecto.
@@ -922,21 +930,29 @@ def pettitt(x):
     return k, K, min(1.0, 2 * np.exp(-6 * K ** 2 / (n ** 3 + n ** 2)))
 
 
-# estaciones con dato en todos los años 2020–2024, para que el cambio de red no genere un falso cambio
-fijas = PT.groupby("est").anio.nunique().loc[lambda s_: s_ == 5].index
-men = PT[PT.est.isin(fijas)].groupby([PT.hora.dt.to_period("M"), "est"]).vel.mean().unstack()
-men_red = men.mean(axis=1)
-anom_red = men_red - men_red.groupby(men_red.index.month).transform("mean")
+# media mensual por estación (solo meses con al menos 15 días con dato) y anomalía respecto a su climatología
+dias_mes = PT.groupby([PT.hora.dt.to_period("M"), "est"]).hora.apply(lambda h: h.dt.day.nunique()).unstack()
+men = PT.groupby([PT.hora.dt.to_period("M"), "est"]).vel.mean().unstack().where(dias_mes >= 15)
+clim_est = men.groupby(men.index.month).transform("mean")
+anom_est = men - clim_est
+n_est_mes = anom_est.notna().sum(axis=1)
+anom_red = anom_est.mean(axis=1)[n_est_mes >= 15]
+presentes_siempre = anom_est.loc[anom_red.index].notna().all().sum()
 k_cp, K_cp, p_cp = pettitt(anom_red.to_numpy())
 fecha_cp = anom_red.index[k_cp + 1].to_timestamp()
-fig, ax = plt.subplots(figsize=(15, 3.8))
+fig, (ax, ax2) = plt.subplots(2, 1, figsize=(15, 5.5), sharex=True, gridspec_kw={"height_ratios": [3, 1]})
 x_ = anom_red.index.to_timestamp()
 ax.bar(x_, anom_red, width=20, color=np.where(anom_red > 0, "steelblue", "indianred"))
 ax.axvspan(pd.Timestamp("2020-08-01"), pd.Timestamp("2023-02-28"), color="blue", alpha=.07, label="La Niña (ONI)")
 ax.axvspan(pd.Timestamp("2023-06-01"), pd.Timestamp("2024-05-31"), color="red", alpha=.07, label="El Niño (ONI)")
 ax.axvline(fecha_cp, color="k", ls="--", label=f"punto de cambio de Pettitt (p = {p_cp:.3f})")
-ax.set(title=f"Anomalía mensual de velocidad de la red ({len(fijas)} estaciones presentes los 5 años)", ylabel="m/s")
-ax.legend(loc="upper left", fontsize=8); plt.show()
+ax.set(title="Anomalía mensual media de las estaciones (cada una respecto a su propia climatología)", ylabel="m/s")
+ax.legend(loc="upper left", fontsize=8)
+ax2.bar(x_, n_est_mes.loc[anom_red.index], width=20, color="gray")
+ax2.set(ylabel="estaciones", title="Estaciones que aportan a cada mes")
+fig.tight_layout(); plt.show()
+print(f"Meses analizados: {len(anom_red)} | estaciones por mes: {n_est_mes.loc[anom_red.index].min()} a "
+      f"{n_est_mes.loc[anom_red.index].max()} | estaciones presentes en todos esos meses: {presentes_siempre}")
 media_antes, media_despues = anom_red[:k_cp + 1].mean(), anom_red[k_cp + 1:].mean()
 print(f"Pettitt: cambio más probable en {fecha_cp:%Y-%m} (p = {p_cp:.3f}); "
       f"anomalía media antes {media_antes:+.2f} m/s y después {media_despues:+.2f} m/s")
@@ -945,13 +961,19 @@ enso = pd.Series(np.select([(x_ >= "2020-08-01") & (x_ <= "2023-02-28"), (x_ >= 
 print("Anomalía media por fase ENSO (m/s):", anom_red.groupby(enso).mean().round(3).to_dict())
 
 # %% [markdown]
-# **Interpretación.** La prueba de Pettitt detecta un cambio de nivel en **abril de 2023**
-# (p = 0.04): la anomalía media pasa de −0.10 a +0.19 m/s. La fecha coincide con el final del episodio
-# La Niña 2020–2023 y el inicio de El Niño 2023–2024: la anomalía media es −0.17 m/s en La Niña y
-# +0.33 m/s en El Niño. Esto es compatible con la influencia conocida de ENSO sobre los vientos del Caribe,
-# aunque con un solo ciclo no se puede atribuir causalmente. **Consecuencia para el modelado:** el año
-# de prueba (2025) sigue a un episodio de El Niño, así que parte de la variación entre años de
-# validación puede deberse a ENSO; por eso se valida por años completos y se reporta cada año.
+# **Interpretación (exploratoria).** Con las anomalías de cada estación respecto a su propia
+# climatología, la prueba de Pettitt señala un cambio en **febrero de 2022** (p = 0.003), pero de tamaño
+# despreciable: la anomalía media pasa de +0.04 a −0.05 m/s. Las diferencias entre fases ENSO también son
+# mínimas (−0.01 m/s en La Niña, +0.04 m/s en El Niño). En una versión anterior de este análisis, que
+# promediaba directamente la velocidad de la red, aparecía un cambio de +0.3 m/s en abril de 2023 que
+# coincidía con el paso de La Niña a El Niño; al controlar la composición de la red ese cambio
+# desaparece, así que **era sobre todo un efecto de qué estaciones reportaban cada mes**. Dos
+# advertencias: solo 42 de los 60 meses tienen al menos 15 estaciones y solo una estación está presente
+# en todos ellos; y una estación que solo reporta parte del periodo absorbe en su propia climatología
+# parte de la variación entre años. Por eso **no se puede afirmar ni descartar un efecto de ENSO** con
+# estos datos. **Consecuencia para el modelado:** no hay evidencia de un cambio de régimen que obligue a
+# tratar los años por separado, pero la variación entre años se sigue controlando con la validación por
+# años completos.
 
 # %% [markdown]
 # ### 2.6.3 Descomposición, estacionariedad y dependencia temporal
@@ -1129,13 +1151,24 @@ radios = np.arange(5, 155, 5)
 n_e = len(xy)
 K_r = np.array([area / (n_e * (n_e - 1)) * (dxy < r).sum() for r in radios])
 L_r = np.sqrt(K_r / np.pi) - radios
+# envolvente de CSR con la MISMA ventana y el mismo estimador que los datos: puntos uniformes dentro del
+# polígono convexo de las estaciones (muestreo por rechazo) y su misma área
+from matplotlib.path import Path as Trazado
+casco = ConvexHull(xy)
+ventana = Trazado(xy[casco.vertices])
 sims = []
-for _ in range(99):  # envolvente de CSR: puntos uniformes en la caja envolvente de las estaciones
-    xs = np.column_stack([RNG.uniform(xk.min(), xk.max(), n_e), RNG.uniform(yk.min(), yk.max(), n_e)])
+for _ in range(99):
+    xs = np.empty((0, 2))
+    while len(xs) < n_e:
+        cand = np.column_stack([RNG.uniform(xk.min(), xk.max(), 4 * n_e), RNG.uniform(yk.min(), yk.max(), 4 * n_e)])
+        xs = np.vstack([xs, cand[ventana.contains_points(cand)]])
+    xs = xs[:n_e]
     ds = np.sqrt(((xs[:, None] - xs[None]) ** 2).sum(-1)); np.fill_diagonal(ds, np.inf)
-    a_caja = (xk.max() - xk.min()) * (yk.max() - yk.min())
-    sims.append(np.sqrt(np.array([a_caja / (n_e * (n_e - 1)) * (ds < r).sum() for r in radios]) / np.pi) - radios)
+    sims.append(np.sqrt(np.array([area / (n_e * (n_e - 1)) * (ds < r).sum() for r in radios]) / np.pi) - radios)
 sims = np.array(sims)
+fuera = radios[(L_r < sims.min(0)) | (L_r > sims.max(0))]
+print(f"Ripley: radios donde la curva observada sale de la envolvente CSR: "
+      f"{', '.join(map(str, fuera)) + ' km' if len(fuera) else 'ninguno'}")
 
 # clusters espaciales con DBSCAN (distancia haversine)
 eps_km = 40
@@ -1273,10 +1306,10 @@ mau
 #   corrección FDR por las pruebas múltiples, identifica un único agrupamiento: el **hotspot alto-alto de La Guajira** (5 estaciones; 8 sin corregir). Los mapas LISA son **exploratorios**. El
 #   semivariograma crece con la distancia y alcanza la varianza total hacia los 250 km: las estaciones a
 #   menos de ~100 km tienen velocidades medias parecidas.
-# * **Patrón de puntos a distintas escalas:** la función L de Ripley queda dentro de la
-#   envolvente de aleatoriedad espacial completa (CSR) hasta ≈ 130 km, así que no hay evidencia de
-#   agrupamiento ni de regularidad fuerte a escala local. Los valores negativos a gran distancia se
-#   explican por el efecto de borde (no se corrigió) y por la forma alargada de la región. DBSCAN
+# * **Patrón de puntos a distintas escalas:** usando la misma ventana (el polígono convexo de las
+#   estaciones) para los datos y para las simulaciones, la función L de Ripley queda **dentro de la
+#   envolvente de aleatoriedad espacial completa (CSR) entre 5 y 150 km**: no hay evidencia de
+#   agrupamiento ni de regularidad a esas escalas (el estimador no corrige el efecto de borde). DBSCAN
 #   (haversine, 40 km) encuentra 7 grupos de estaciones cercanas y deja 21 aisladas, sobre todo en el
 #   sur de Córdoba y Bolívar y en La Guajira: son las **zonas con menor cobertura**.
 # * **Hotspots de Getis-Ord Gi\*:** con corrección FDR, 5 estaciones del norte de La Guajira (Puerto
@@ -1594,9 +1627,11 @@ cobertura = pd.DataFrame({
 cobertura
 
 # %% [markdown]
-# **Sensibilidad a la limpieza retrospectiva.** Se repite la evaluación de 2025 solo con las estaciones
-# cuyos datos de 2025 no tuvieron intervenciones retrospectivas relevantes: ni estación-año excluida ni
-# más del 1 % de lecturas enmascaradas por tramos pegados o picos, en ninguna de las 4 variables.
+# **Sensibilidad a la limpieza retrospectiva.** Se repite la evaluación de 2025 excluyendo las estaciones
+# con las intervenciones retrospectivas más fuertes en 2025: estación-año excluida o más del 1 % de
+# lecturas enmascaradas por tramos pegados o picos, en alguna de las 4 variables. Las estaciones que
+# quedan pueden tener hasta un 1 % de lecturas enmascaradas y siguen pasando por los demás pasos
+# retrospectivos (frecuencia de muestreo, elección del sensor).
 
 # %%
 aud25 = aud[aud.anio == 2025]
@@ -1607,13 +1642,13 @@ sens_limp = pd.DataFrame({
     **{k: [resultados.loc["SVR + meteorología + espacial", k], v] for k, v in
        metricas(y_te[limpias.to_numpy()], pred_te[limpias.to_numpy()], pers_te[limpias.to_numpy()],
                 TE.est.to_numpy()[limpias.to_numpy()]).items()}},
-    index=["todas las estaciones de prueba", "sin intervenciones retrospectivas en 2025"])
+    index=["todas las estaciones de prueba", "sin exclusiones y con ≤ 1 % de lecturas enmascaradas en 2025"])
 print(f"Estaciones de prueba con intervenciones retrospectivas en 2025: {TE.est.isin(intervenidas).groupby(TE.est).first().sum()}")
 sens_limp
 
 # %% [markdown]
-# **Interpretación.** Solo 3 de las 51 estaciones de prueba tuvieron intervenciones
-# retrospectivas relevantes en 2025. Al quitarlas, las métricas prácticamente no cambian (R² 0.738 frente a
+# **Interpretación.** Solo 3 de las 51 estaciones de prueba cumplen ese criterio de intervención fuerte
+# en 2025. Al quitarlas, las métricas prácticamente no cambian (R² 0.738 frente a
 # 0.739, la misma mejora del 13 % sobre la persistencia). Esto muestra que **el resultado es estable ante
 # esa exclusión**; no demuestra que la limpieza retrospectiva no introduzca ningún sesgo ni equivale a
 # una simulación operativa, porque la frecuencia de muestreo y la elección del sensor también usan el
@@ -1722,8 +1757,9 @@ coef.to_frame("coeficiente").T
 #   en un 13 %** (IC 95 %: 12–14 %). Supera a la persistencia en el 94 % de las estaciones y también en
 #   estaciones que no se usaron para ajustarlo (mejora media del 13 %, R² = 0.69). Con **bloques
 #   geográficos y buffer de 30 km** (sin rezago espacial), la mejora media sobre la persistencia se
-#   mantiene en 12 % en todos los bloques (entre 6 % y 17 %), aunque el R² global baja a 0.57 en promedio
-#   y varía mucho entre bloques (0.32 a 0.74): la capacidad de generalizar a zonas nuevas depende de la
+#   mantiene en 12 % de media y es positiva en los seis bloques (entre 6 % y 17 %). El promedio de los R²
+#   de los bloques (no un R² calculado con todas las predicciones juntas) es 0.57, y varía mucho entre
+#   bloques (0.32 a 0.74): la capacidad de generalizar a zonas nuevas depende de la
 #   región. La climatología y el modelo de la media
 #   quedan muy por detrás. El resultado es estable frente a la longitud de los bloques del bootstrap
 #   (3, 7 o 14 días).
