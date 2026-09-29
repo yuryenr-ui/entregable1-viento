@@ -345,12 +345,19 @@ excl.sort_values(["variable", "anio"])
 # | Presión: rango [500, 1100] hPa, picos a > 30 hPa, tramo pegado 12 h, 50 hPa frente a la altitud | 2020–2023 | No |
 # | Temperatura: rango [3, 45] °C y tramo pegado 6 h | 2020–2022 | No |
 # | Temperatura: el criterio de sensor defectuoso cuenta solo lecturas > 45 °C (los 0 °C sueltos solo se enmascaran) | 2020–2025 | **Sí** — solo en la depuración original (EDA) |
-# | Hora válida con ≥ 50 % de lecturas; ventana de 30 días y mínimo de 100 lecturas (limpieza causal, 3.6) | Fijados a priori, sin ajustarlos a los resultados | No |
+# | Hora válida con ≥ 50 % de lecturas; ventana de 30 días y mínimo de 100 lecturas (limpieza causal, sección 3) | Fijados a priori, sin ajustarlos a los resultados | No |
 #
 # El único criterio fijado después de ver 2025 es el de sensor defectuoso de la temperatura, y **solo se
 # usa en la depuración original del EDA**. El modelado (sección 3) usa el criterio general, fijado antes
 # de ver 2025 (cualquier lectura fuera de [3, 45] °C cuenta para marcar el sensor), y la sección 3.6
 # comprueba que con el otro criterio el resultado prácticamente no cambia.
+#
+# **Limitación para la validación cruzada.** "Fijado antes de ver 2025" no equivale a "fijado antes de
+# cada pliegue de validación": varios umbrales se eligieron viendo datos de 2020–2023 (tabla anterior),
+# así que los pliegues de validación de 2021, 2022 y 2023 no son totalmente independientes de la
+# elección de esos umbrales, aunque la limpieza se aplique de forma causal. Eliminarlo exigiría fijar los
+# umbrales solo con 2020 o volver a elegirlos dentro de cada pliegue. La prueba final (2025) sí es
+# independiente de todos los umbrales del modelado.
 #
 # **Justificación de los umbrales.** Los umbrales se eligieron para esta red a partir de la propia
 # auditoría, no como límites físicos universales. Para no justificar la limpieza con los datos ya
@@ -386,9 +393,9 @@ excl.sort_values(["variable", "anio"])
 # histórico, no una simulación operativa. La celda siguiente cuantifica cuántas lecturas afectan las dos
 # reglas cuantificables (exclusión de estación-años y tramos pegados o picos); la elección del sensor y la
 # estimación de la frecuencia de muestreo no se pueden medir de la misma forma. La
-# sección 3.2 comprueba que el resultado es **estable** al excluir las estaciones de 2025 con
-# intervenciones retrospectivas. Esa comprobación no reemplaza a una reconstrucción de todo el
-# procesamiento con información exclusivamente pasada, que queda fuera del alcance de este entregable.
+# depuración retrospectiva **solo se usa en el EDA**: todo el modelado (sección 3) usa un procesamiento
+# reconstruido desde los CSV originales con reglas causales, en el que cada lectura se limpia solo con
+# información anterior a ella, y la sección 3.6 lo compara con esta depuración original.
 
 # %% [markdown]
 # **Casi-duplicados.** Además de los duplicados exactos, se buscan estaciones con las mismas
@@ -1472,9 +1479,12 @@ fig.tight_layout(); plt.show()
 # | Sensor con más horas en el año | Si hay varios sensores válidos en la hora, **se promedian** |
 # | Nombre y coordenadas de la última observación | De la **primera** observación |
 #
-# **Estaciones y sensores nuevos:** no se descartan por falta de historial. Hasta acumular 30 días no se
-# puede marcar el sensor como defectuoso (solo se aplica el rango fijo), la frecuencia de muestreo se
-# toma de su tipo de sensor y la referencia de presión es la esperada por la altitud.
+# **Estaciones y sensores nuevos:** no se descartan por falta de historial. Mientras el sensor no tenga
+# al menos **100 lecturas en los 30 días anteriores**, no se lo puede marcar como defectuoso (solo se
+# aplica el rango fijo); con sensores de 10 minutos, 100 lecturas se alcanzan en menos de un día, así que
+# la regla puede empezar a actuar antes de cumplir un mes. Mientras tenga menos de 12 intervalos previos,
+# la frecuencia de muestreo se toma de su tipo de sensor, y sin 3 días previos de presión la referencia es
+# la presión esperada por la altitud.
 #
 # Como la limpieza es causal en todos los años, cada pliegue de la validación cruzada (2021–2024) y la
 # prueba (2025) usan datos limpiados solo con su pasado. Las predictoras se construyen con la misma
@@ -1967,7 +1977,8 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 # de estaciones de cada año, por lo que siempre se reporta junto con el R² por estación y la mejora
 # sobre la persistencia; (v) el EDA usa la depuración original, que es retrospectiva y en temperatura
 # incluye un criterio fijado después de ver 2025; todo el modelado (sección 3) usa la limpieza causal, con
-# umbrales fijados antes de ver 2025; (vi) la hora local es un supuesto
+# umbrales fijados antes de ver 2025 (aunque algunos con datos de 2020–2023, así que los pliegues de
+# validación 2021–2023 no son del todo independientes de su elección); (vi) la hora local es un supuesto
 # respaldado por el ciclo diario, no documentado por la fuente; (vii) la anticipación real desde la emisión es de 23 h hasta el inicio de la hora
 # objetivo.
 
