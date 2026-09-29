@@ -5,3 +5,4 @@ __pycache__/
 .ipynb_checkpoints/
 # los datos procesados pesan cientos de MB: se regeneran con scripts/procesar_todo.py
 *.csv
+!resultados/umbral_velocidad.csv

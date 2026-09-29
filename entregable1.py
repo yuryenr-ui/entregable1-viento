@@ -297,9 +297,9 @@ altas = aud[aud.variable == "velocidad"].assign(n_fuera=lambda d: d.frac_fuera *
 top2 = altas.groupby("NombreEstacion").n_fuera.sum().nlargest(2)
 print(f"Lecturas de velocidad fuera de [0, 25] m/s: {altas.n_fuera.sum():,.0f}; "
       f"{100 * top2.sum() / altas.n_fuera.sum():.0f} % vienen de {', '.join(top2.index.str.strip())}")
-cola = pd.Series({f"> {u} m/s": int((P.vel > u).sum()) for u in [10, 15, 20, 25]}, name="horas en el panel limpio")
-print(f"Velocidad horaria máxima en el panel limpio: {P.vel.max():.1f} m/s")
-display(cola.to_frame())
+umbral = pd.read_csv("resultados/umbral_velocidad.csv")  # generado por scripts/revisar_umbral.py con los CSV crudos
+print("Lecturas crudas de velocidad que eliminaría cada umbral (revisión sobre los archivos originales):")
+display(umbral.set_index(["umbral (m/s)", "estaciones"]))
 excl.sort_values(["variable", "anio"])
 
 # %% [markdown]
@@ -316,12 +316,19 @@ excl.sort_values(["variable", "anio"])
 # | Horas incompletas | Una hora es válida si tiene al menos el 50 % de las lecturas esperadas |
 #
 # **Justificación de los umbrales.** Los umbrales se eligieron para esta red a partir de la propia
-# auditoría, no como límites físicos universales, y se comprueba que no recortan eventos reales:
+# auditoría, no como límites físicos universales. Para no justificar la limpieza con los datos ya
+# limpios, se revisaron **las lecturas eliminadas** directamente en los CSV crudos
+# (`scripts/revisar_umbral.py`, tabla de la celda siguiente):
 #
-# * Las lecturas de velocidad por encima de 25 m/s se concentran en dos sensores con fallas evidentes
-#   (celda siguiente), que además tienen saltos bruscos y tramos de 0 constante durante meses.
-# * En el panel ya limpio, la cola superior de la velocidad horaria termina muy por debajo del umbral
-#   (tabla de la cola más abajo): el umbral no es la restricción que determina los valores altos.
+# * La gran mayoría de las lecturas de velocidad por encima de 25 m/s vienen de dos sensores con fallas
+#   evidentes (Galerazamba y Mongui), que además tienen saltos bruscos y tramos de 0 constante durante
+#   meses.
+# * En las demás estaciones, la mayoría de las lecturas eliminadas son **picos aislados**: superan en
+#   más de 15 m/s a la mediana de la lectura anterior y la siguiente (10 o 2 minutos antes y después).
+#   Un salto así, ida y vuelta, no es compatible con un viento medio real. El resto no se puede clasificar
+#   con certeza, pero son del orden de un centenar de lecturas entre 30 millones.
+# * **Sensibilidad al umbral:** pasar de 25 a 30 m/s solo conservaría unas 70 lecturas más fuera de los
+#   sensores dañados, así que la elección entre esos valores no cambia el panel de forma apreciable.
 # * En temperatura, las lecturas por encima de 45 °C aparecen en sensores concretos que repiten
 #   exactamente el mismo valor máximo (50.0 °C), un patrón compatible con un tope del sensor más que
 #   con temperaturas reales. No se pudo confirmar con la ficha técnica del instrumento, así que se
@@ -339,8 +346,9 @@ excl.sort_values(["variable", "anio"])
 # (que borra sus lecturas desde el inicio del tramo), la frecuencia de muestreo estimada con el archivo
 # completo y la elección del sensor con más horas del año. Es un control de calidad del archivo
 # histórico, no una simulación operativa. La celda siguiente cuantifica cuántas lecturas afecta, y la
-# sección 3.2 compara el desempeño en las estaciones de 2025 que no tuvieron intervenciones
-# retrospectivas relevantes.
+# sección 3.2 comprueba que el resultado es **estable** al excluir las estaciones de 2025 con
+# intervenciones retrospectivas. Esa comprobación no reemplaza a una reconstrucción de todo el
+# procesamiento con información exclusivamente pasada, que queda fuera del alcance de este entregable.
 
 # %% [markdown]
 # **Casi-duplicados.** Además de los duplicados exactos, se buscan estaciones con las mismas
@@ -1606,9 +1614,11 @@ sens_limp
 # %% [markdown]
 # **Interpretación.** Solo 3 de las 51 estaciones de prueba tuvieron intervenciones
 # retrospectivas relevantes en 2025. Al quitarlas, las métricas prácticamente no cambian (R² 0.738 frente a
-# 0.739, la misma mejora del 13 % sobre la persistencia). Esto **acota** el efecto de la limpieza
-# retrospectiva sobre la evaluación, aunque no equivale a una simulación totalmente operativa: la
-# frecuencia de muestreo y la elección del sensor también usan el año completo. En conjunto, las reglas
+# 0.739, la misma mejora del 13 % sobre la persistencia). Esto muestra que **el resultado es estable ante
+# esa exclusión**; no demuestra que la limpieza retrospectiva no introduzca ningún sesgo ni equivale a
+# una simulación operativa, porque la frecuencia de muestreo y la elección del sensor también usan el
+# año completo. Reconstruir todo el procesamiento solo con información pasada queda como trabajo
+# pendiente. En conjunto, las reglas
 # retrospectivas afectan al 2.1 % de las lecturas auditadas (0.5 % en estación-años excluidas y 1.7 % en
 # tramos pegados o picos), sobre todo de dirección del viento.
 
@@ -1785,7 +1795,8 @@ coef.to_frame("coeficiente").T
 # excluye las estaciones sin sensor de presión o de temperatura; (iv) el R² global depende del conjunto
 # de estaciones de cada año, por lo que siempre se reporta junto con el R² por estación y la mejora
 # sobre la persistencia; (v) el control de calidad usa estadísticas de la estación-año completa
-# (retrospectivo; la sensibilidad de la sección 3.2 acota su efecto); (vi) la hora local es un supuesto
+# (retrospectivo; la sección 3.2 muestra que el resultado es estable al excluir las estaciones afectadas,
+# pero no se reconstruyó el procesamiento con información exclusivamente pasada); (vi) la hora local es un supuesto
 # respaldado por el ciclo diario, no documentado por la fuente; (vii) la anticipación real desde la emisión es de 23 h hasta el inicio de la hora
 # objetivo.
 
