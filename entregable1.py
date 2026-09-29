@@ -279,7 +279,7 @@ por_anio
 # %%
 filas = []
 for f in sorted((DATOS / "reportes").glob("*.txt")):
-    if f.stem.endswith("_causal"):  # los reportes de la limpieza causal se analizan en la sección 3.6
+    if "_causal" in f.stem:  # los reportes de la limpieza causal (y su sensibilidad) no son de la depuración original
         continue
     var, anio = f.stem.split("_")
     t = f.read_text(encoding="utf-8")
