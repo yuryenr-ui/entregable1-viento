@@ -24,6 +24,7 @@ análisis exploratorio (EDA) y modelo base.
    mkdir ../ideam_viento
    cd ../ideam_viento
    python ../entregable1/scripts/procesar_todo.py "<carpeta de descargas>"
+   python ../entregable1/scripts/procesar_todo.py "<carpeta de descargas>" --causal
    python ../entregable1/scripts/verificar_conteo.py "<carpeta de descargas>"
    ```
 
@@ -32,9 +33,9 @@ análisis exploratorio (EDA) y modelo base.
    genera `resultados/umbral_velocidad.csv`.
 4. Ejecutar `entregable1.ipynb` con las versiones de `requirements.txt` (semilla fija: 42).
 
-**Nota metodológica:** la depuración de los datos usa información del año completo (control de calidad
-retrospectivo), así que las métricas del modelo corresponden a una evaluación sobre datos depurados
-retrospectivamente. Ver las secciones 1.6 y 3.2 del entregable.
+**Nota metodológica:** el EDA usa la depuración original, que es retrospectiva (control de calidad con
+información de la estación-año completa). La evaluación principal del modelo (sección 3.6) usa una
+limpieza causal (`--causal`), en la que cada lectura se limpia solo con información anterior a ella.
 
 Límites departamentales del mapa base: [geoBoundaries](https://www.geoboundaries.org) (fuente
 OpenStreetMap, licencia ODbL 1.0).
