@@ -352,12 +352,13 @@ excl.sort_values(["variable", "anio"])
 # de ver 2025 (cualquier lectura fuera de [3, 45] °C cuenta para marcar el sensor), y la sección 3.6
 # comprueba que con el otro criterio el resultado prácticamente no cambia.
 #
-# **Limitación para la validación cruzada.** "Fijado antes de ver 2025" no equivale a "fijado antes de
-# cada pliegue de validación": varios umbrales se eligieron viendo datos de 2020–2023 (tabla anterior),
-# así que los pliegues de validación de 2021, 2022 y 2023 no son totalmente independientes de la
-# elección de esos umbrales, aunque la limpieza se aplique de forma causal. Eliminarlo exigiría fijar los
-# umbrales solo con 2020 o volver a elegirlos dentro de cada pliegue. La prueba final (2025) sí es
-# independiente de todos los umbrales del modelado.
+# **Independencia de la validación respecto de los umbrales.** "Fijado antes de ver 2025" no equivale a
+# "fijado antes de cada pliegue de validación": varios umbrales se eligieron viendo datos de 2020–2023
+# (tabla anterior), así que los pliegues de validación de 2021, 2022 y 2023 no son independientes de esa
+# elección. Por eso **los hiperparámetros se eligen solo con el pliegue de 2024** (entrenamiento 2020–2023,
+# validación 2024), que junto con la prueba de 2025 es independiente de todos los umbrales del modelado;
+# los pliegues 2021–2023 se muestran solo como referencia (sección 3.1). La curva de aprendizaje también
+# valida en 2024.
 #
 # **Justificación de los umbrales.** Los umbrales se eligieron para esta red a partir de la propia
 # auditoría, no como límites físicos universales. Para no justificar la limpieza con los datos ya
@@ -1523,6 +1524,10 @@ print(f"Conjunto de modelado causal: {len(D):,} filas | entrenamiento {len(TR):,
 # Pliegues expansivos por años completos: se entrena con los años anteriores y se valida con el
 # siguiente (2021, 2022, 2023, 2024). El filtro por la fecha del objetivo evita que un objetivo de
 # entrenamiento caiga en el año de validación (equivale a un *gap* de 24 h).
+#
+# **La configuración se elige solo con el pliegue de 2024** (entrenamiento 2020–2023, validación 2024):
+# es el único pliegue de validación independiente de todos los umbrales de limpieza, porque ninguno se
+# fijó viendo 2024 (sección 1.6). Los pliegues de 2021–2023 se muestran como referencia de estabilidad.
 
 # %%
 def svr(C=0.1, log=False):
@@ -1549,9 +1554,10 @@ cv["mejora"] = 1 - cv.RMSE / cv["RMSE persistencia"]
 tabla_cv = cv.pivot_table(index=["log(1+y)", "C"], columns="año validación", values="RMSE")
 tabla_cv["RMSE medio"] = tabla_cv.mean(axis=1)
 tabla_cv["mejora media vs. persistencia"] = cv.groupby(["log(1+y)", "C"]).mejora.mean()
-mejor = tabla_cv["RMSE medio"].idxmin()
+mejor = tabla_cv[2024].idxmin()  # solo el pliegue independiente de los umbrales de limpieza
 LOG_OPT, C_OPT = mejor
-print(f"Configuración elegida por validación cruzada: log(1+y) = {LOG_OPT}, C = {C_OPT}")
+print(f"Configuración elegida con el pliegue de validación 2024: log(1+y) = {LOG_OPT}, C = {C_OPT}")
+print(f"(con el RMSE medio de los 4 pliegues se elegiría la misma: {tabla_cv['RMSE medio'].idxmin() == mejor})")
 tabla_cv
 
 # %% [markdown]
@@ -1816,7 +1822,8 @@ coef.to_frame("coeficiente").T
 # %% [markdown]
 # **Interpretación** (todos los resultados de esta sección usan la limpieza causal).
 #
-# * **Validación cruzada:** C no cambia el resultado (con n ≈ 400 000 la regularización pesa poco) y el
+# * **Validación cruzada:** la configuración elegida con el pliegue de 2024 es la misma que con el
+#   promedio de los cuatro pliegues. C no cambia el resultado (con n ≈ 400 000 la regularización pesa poco) y el
 #   SVR da prácticamente lo mismo que `Ridge`, como se espera con esta pérdida. Transformar el objetivo
 #   con log(1 + y) empeora mucho el RMSE (mejora media sobre la persistencia de 1 % frente a 13 %), porque
 #   al devolver la predicción a m/s con la exponencial se amplifican los errores; por eso se usa el
@@ -1977,8 +1984,9 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 # de estaciones de cada año, por lo que siempre se reporta junto con el R² por estación y la mejora
 # sobre la persistencia; (v) el EDA usa la depuración original, que es retrospectiva y en temperatura
 # incluye un criterio fijado después de ver 2025; todo el modelado (sección 3) usa la limpieza causal, con
-# umbrales fijados antes de ver 2025 (aunque algunos con datos de 2020–2023, así que los pliegues de
-# validación 2021–2023 no son del todo independientes de su elección); (vi) la hora local es un supuesto
+# umbrales fijados antes de ver 2025; como algunos se fijaron con datos de 2020–2023, los
+# hiperparámetros se eligen solo con el pliegue de 2024, y los pliegues 2021–2023 son solo referencia;
+# (vi) la hora local es un supuesto
 # respaldado por el ciclo diario, no documentado por la fuente; (vii) la anticipación real desde la emisión es de 23 h hasta el inicio de la hora
 # objetivo.
 
