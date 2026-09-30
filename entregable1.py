@@ -357,10 +357,8 @@ excl.sort_values(["variable", "anio"])
 # criterio general, fijado antes (cualquier lectura fuera de `[3, 45] °C` cuenta), y en la sección 3.6
 # comprobamos que con el otro criterio el resultado prácticamente no cambia.
 #
-# Hay un matiz más: que un umbral se haya fijado antes de 2025 no lo hace independiente de todos los años de
-# validación. Varios se eligieron con datos de 2020 a 2023, así que validar en esos años no sería del todo
-# limpio. Por eso elegimos la configuración del modelo con una validación cruzada de cuatro pliegues dentro de
-# 2024 (sección 3.1), un año que, igual que 2025, no se usó para fijar ningún umbral. Los pliegues de 2021 a
+# Algunos umbrales se definieron con datos de 2020–2023; por ello, reservamos 2024 para seleccionar la
+# configuración del modelo, mediante una validación cruzada de cuatro pliegues dentro de ese año (sección 3.1), un año que, igual que 2025, no se usó para fijar ningún umbral. Los pliegues de 2021 a
 # 2023 aparecen solo como referencia, y la curva de aprendizaje también se valida en 2024.
 #
 # Para justificar los umbrales no basta con mirar los datos ya limpios, así que revisamos directamente en los
@@ -1008,10 +1006,10 @@ print("Anomalía media por fase ENSO (m/s):", anom_red.groupby(enso).mean().roun
 # %% [markdown]
 # Con las anomalías por estación, la prueba de Pettitt señala un cambio en febrero de 2022 (`p = 0.003`), pero de
 # un tamaño despreciable: la anomalía media pasa de `+0.04 m/s` a `−0.05 m/s`. Las diferencias entre las fases de ENSO
-# también son mínimas (`−0.01 m/s` en La Niña y `+0.04 m/s` en El Niño). En una primera versión de este análisis,
-# que promediaba directamente la velocidad de toda la red, aparecía un cambio de `+0.3 m/s` en abril de 2023 que
-# coincidía con el paso de La Niña a El Niño; al controlar la composición de la red ese cambio desaparece, así
-# que se debía sobre todo a qué estaciones reportaban cada mes.
+# también son mínimas (`−0.01 m/s` en La Niña y `+0.04 m/s` en El Niño). Al promediar directamente
+# la velocidad de toda la red aparece un cambio de `+0.3 m/s` en abril de 2023, que coincide con el paso de La
+# Niña a El Niño; ese cambio desaparece al controlar la composición de la red, de modo que se debe sobre todo a
+# qué estaciones reportaban cada mes.
 #
 # Hay dos advertencias: solo 42 de los 60 meses tienen al menos 15 estaciones (y solo una estación aparece en
 # todos ellos), y una estación que reporta solo parte del periodo absorbe en su propia climatología parte de la
@@ -1857,7 +1855,7 @@ coef.to_frame("coeficiente").T
 # Casi toda la mejora viene de la historia de la velocidad (`+12.3 %`). En la comparación pareada con bootstrap, las
 # variables meteorológicas reducen el RMSE en `0.007 m/s` (`IC 95 %: 0.006–0.008`) y el rezago espacial en `0.001 m/s`
 # (`0.001–0.002`): diferencias que se distinguen de cero pero que en la práctica son despreciables. Los coeficientes
-# cuentan lo mismo: los mayores son la velocidad actual (`0.43`), la de hace 23 h (`0.31`) y la media de las últimas
+# respaldan este resultado: los mayores son la velocidad actual (`0.43`), la de hace 23 h (`0.31`) y la media de las últimas
 # 24 h (`0.27`). En esencia, el modelo estima el viento de mañana a esta hora combinando el de hoy a la misma hora
 # con el nivel general del día.
 #
@@ -1948,7 +1946,7 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 # prácticamente idénticas (diferencia de RMSE de `0.0002 m/s` sobre las mismas 213 972 filas), de modo que esa
 # decisión no influye en los resultados que reportamos.
 #
-# ## 3.7 ¿Qué tan creíble es el resultado?
+# ## 3.7 Robustez y alcance de los resultados
 #
 # Un `R²` demasiado alto en un pronóstico de este tipo haría sospechar de algún error, así que revisamos el nuestro
 # (`0.737` en la prueba) desde varios ángulos:
