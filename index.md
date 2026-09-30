@@ -2,19 +2,22 @@
 
 **Curso:** Machine Learning · **Profesor:** Lihki Rubio Ortega · **Grupo:** Yuryen Rollo, Betzaida Ruiz
 
-Este libro contiene el **Entregable 1** del proyecto de investigación: selección de la base de datos,
-análisis exploratorio (EDA) y modelo base.
+¿Se puede anticipar con un día de antelación la velocidad del viento que medirá una estación del
+Caribe colombiano? En este trabajo lo estudiamos con las mediciones horarias del IDEAM: describimos y
+depuramos los datos, analizamos su comportamiento en el tiempo y en el espacio, y ajustamos un primer
+modelo que comparamos con referencias simples.
 
 - **Datos:** estaciones automáticas del IDEAM publicadas en el Portal Nacional de Datos Abiertos
-  (datos.gov.co): velocidad y dirección del viento, temperatura del aire y presión atmosférica,
-  7 departamentos del Caribe, 2020–2025. Licencia: CC BY-SA 4.0, atribución al IDEAM.
-- **Problema:** pronosticar la velocidad media horaria del viento 24 horas después de la última hora
-  observada.
-- **Modelo base:** SVR lineal, comparado con persistencia, climatología y un modelo de media.
+  (datos.gov.co): velocidad y dirección del viento, temperatura del aire y presión atmosférica en
+  7 departamentos del Caribe, 2020–2025. Licencia CC BY-SA 4.0, con atribución al IDEAM.
+- **Pregunta:** cuál será la velocidad media del viento en la hora que empieza 24 horas después de la
+  última hora observada.
+- **Modelo base:** un SVR lineal, comparado con la persistencia, la climatología y un modelo de media.
+  Reduce el error de la persistencia en un 13 % (R² = 0.74 en 2025).
 
 ## Reproducibilidad
 
-1. Descargar los CSV de datos.gov.co (enlaces en la sección 1.3 del entregable), uno por variable y año,
+1. Descargar los CSV de datos.gov.co (los enlaces están en la sección 1.3), uno por variable y año,
    en subcarpetas `VELOCIDAD DEL VIENTO`, `DIRECCION DEL VIENTO`, `TEMPERATURA`, `PRESION` y
    `CATALOGO estaciones`.
 2. Generar el panel en la carpeta hermana `ideam_viento/`, que es donde lo busca el notebook (los
@@ -33,9 +36,9 @@ análisis exploratorio (EDA) y modelo base.
    genera `resultados/umbral_velocidad.csv`.
 4. Ejecutar `entregable1.ipynb` con las versiones de `requirements.txt` (semilla fija: 42).
 
-**Nota metodológica:** el EDA usa la depuración original, que es retrospectiva (control de calidad con
-información de la estación-año completa). Todo el modelado (sección 3) usa una
-limpieza causal (`--causal`), en la que cada lectura se limpia solo con información anterior a ella.
+El análisis exploratorio usa una depuración retrospectiva, que revisa cada estación-año completa. Para el
+modelado (sección 3) reprocesamos los datos con una limpieza causal (`--causal`), en la que cada lectura se
+limpia solo con información anterior a ella.
 
 Límites departamentales del mapa base: [geoBoundaries](https://www.geoboundaries.org) (fuente
 OpenStreetMap, licencia ODbL 1.0).

@@ -1,16 +1,20 @@
 # %% [markdown]
-# # Entregable 1 — Pronóstico de la velocidad del viento a 24 horas en el Caribe colombiano
+# # Pronóstico de la velocidad del viento a 24 horas en el Caribe colombiano
 #
 # **Curso:** Machine Learning · **Profesor:** Lihki Rubio Ortega
 # **Grupo:** Yuryen Rollo, Betzaida Ruiz
 #
-# Este informe cubre las tres partes del primer entregable: (1) la base de datos, (2) el análisis
-# exploratorio (EDA) y (3) un modelo base comparado contra líneas base triviales.
+# En este trabajo nos preguntamos si es posible anticipar, con un día de antelación, la velocidad del
+# viento que medirá una estación meteorológica del Caribe colombiano. Para responderlo usamos las
+# mediciones horarias que el IDEAM publica en el Portal Nacional de Datos Abiertos para 76 estaciones de
+# siete departamentos entre 2020 y 2025. Primero describimos los datos y revisamos su calidad; después
+# analizamos su comportamiento en el tiempo y en el espacio; y por último ajustamos un modelo base, un SVR
+# lineal, que comparamos con referencias simples como repetir el valor de hoy.
 #
-# **Reproducibilidad.** El notebook parte del panel ya procesado (`panel_multivariado.csv`), que se
-# genera a partir de los 24 CSV originales del IDEAM con los scripts de `scripts/`. Los scripts escriben
-# sus resultados en la carpeta desde la que se ejecutan, y el notebook los busca en la carpeta hermana
-# `../ideam_viento/`. Desde la carpeta de este repositorio:
+# **Reproducibilidad.** El notebook trabaja sobre un panel ya procesado (`panel_multivariado.csv`), que se
+# obtiene a partir de los 24 CSV originales del IDEAM con los scripts de la carpeta `scripts/`. Los scripts
+# escriben sus resultados en la carpeta desde la que se ejecutan, y el notebook los lee de la carpeta
+# hermana `../ideam_viento/`. Desde la carpeta de este repositorio:
 #
 # ```
 # mkdir ../ideam_viento
@@ -20,12 +24,13 @@
 # python ../entregable1/scripts/verificar_conteo.py "<carpeta con los CSV descargados>"
 # ```
 #
-# `procesar_todo.py` ejecuta `procesar_variable.py` (limpieza de cada variable) y `unir_panel.py`
-# (unión con el catálogo) y escribe el panel y los reportes de auditoría que usa la sección 1.6. Para
-# usar otra carpeta, se define la variable de entorno `DATOS_PANEL` antes de abrir el notebook. La tabla de
-# umbrales de la sección 1.6 se genera con `python scripts/revisar_umbral.py "<carpeta VELOCIDAD DEL
-# VIENTO>"` desde la carpeta del repositorio. Todas las
-# semillas están fijadas (42) y las versiones de las librerías están en `requirements.txt`.
+# `procesar_todo.py` ejecuta `procesar_variable.py` (limpieza de cada variable) y `unir_panel.py` (unión
+# con el catálogo de estaciones) y escribe el panel y los reportes de auditoría que usa la sección 1.6. Para
+# leer los datos de otra carpeta basta con definir la variable de entorno `DATOS_PANEL` antes de abrir el
+# notebook. La tabla de umbrales de la sección 1.6 se genera con
+# `python scripts/revisar_umbral.py "<carpeta VELOCIDAD DEL VIENTO>"` desde la carpeta del repositorio.
+# Todas las semillas aleatorias están fijadas (42) y las versiones de las librerías están en
+# `requirements.txt`.
 
 # %%
 import json
@@ -154,23 +159,25 @@ def moran_perm(z, W, n=999, rng=RNG):
 #
 # ## 1.1 Problema de investigación
 #
-# **Pregunta:** ¿se puede predecir la velocidad del viento de mañana a esta misma hora en una estación
-# meteorológica del Caribe colombiano usando solo la información disponible hasta el momento actual?
+# Queremos saber si la velocidad del viento de mañana, a una hora determinada, se puede predecir en una
+# estación del Caribe colombiano usando únicamente lo que se ha medido hasta hoy. Es un problema de
+# regresión sobre un panel espacio-temporal: cada observación es una estación en una hora, las estaciones
+# tienen coordenadas y sus mediciones forman series de tiempo, así que el análisis tiene que tener en cuenta
+# tanto la dependencia temporal como la espacial (secciones 2.6 a 2.8).
 #
-# * **Tarea:** regresión espacio-temporal: el dataset tiene fecha-hora y coordenadas, así que sigue la
-#   **ruta D** del diagrama del entregable (EDA temporal, espacial y espacio-temporal, secciones 2.6–2.8).
-# * **Convención temporal.** Cada registro horario `t` es el **promedio de la hora que empieza en t**
-#   (por ejemplo, 10:00 = promedio de 10:00 a 10:59). Ese promedio solo se conoce al cerrar la hora, así
-#   que **el pronóstico se emite en t + 1 h**, con la hora t como última hora completa observada.
-# * **Variable objetivo:** `VViento(t + 24 h)`: la velocidad media de la hora que empieza 24 h después
-#   de la última hora observada. Medido desde la emisión, la hora objetivo empieza 23 h después y
-#   termina 24 h después. En el texto se llama "horizonte de 24 h" en ese sentido.
-# * **Aplicación:** planificación de la operación del día siguiente en parques eólicos (La Guajira),
-#   puertos (Barranquilla, Cartagena, Santa Marta) y aeropuertos.
+# Conviene precisar qué significa "24 horas". Cada registro horario `t` es el promedio de la hora que empieza
+# en t; por ejemplo, el valor de las 10:00 resume lo medido entre las 10:00 y las 10:59. Como ese promedio solo
+# existe cuando la hora termina, el pronóstico se emite en t + 1 h, con la hora t como la última completa. La
+# variable objetivo es `VViento(t + 24 h)`: la velocidad media de la hora que empieza 24 h después de la
+# última hora observada. Visto desde el momento en que se emite el pronóstico, la hora objetivo empieza 23 h
+# después y termina 24 h después; en el resto del documento hablamos de horizonte de 24 h en ese sentido.
 #
-# ## 1.2 Justificación de la selección del dataset
+# Un pronóstico así tiene usos concretos: planear la operación del día siguiente en los parques eólicos de
+# La Guajira, en los puertos de Barranquilla, Cartagena y Santa Marta, y en los aeropuertos de la región.
 #
-# Antes de este dataset se evaluaron otros dos, que se descartaron:
+# ## 1.2 Selección del conjunto de datos
+#
+# Antes de llegar a este conjunto evaluamos otras dos fuentes:
 #
 # | Dataset | Resultado | Decisión |
 # |---|---|---|
@@ -178,8 +185,9 @@ def moran_perm(z, W, n=999, rng=RNG):
 # | Mendeley (estaciones in situ, diario) | Sus estaciones de Atlántico no aparecen en el catálogo oficial DHIME del IDEAM: no es verificable | Descartado |
 # | **IDEAM horario (datos.gov.co)** | Mediciones in situ de la fuente oficial, con resolución horaria (permite estudiar el ciclo diario, clave en la costa), 4 variables y 76 estaciones con coordenadas | **Seleccionado** |
 #
-# El criterio de selección fue la **pregunta de investigación** (viento medido en sitios concretos, a
-# escala horaria) y la **verificabilidad de la fuente**, no obtener una métrica más baja.
+# Nos quedamos con el IDEAM porque es el que corresponde a la pregunta que queremos responder: viento medido
+# en sitios concretos y con resolución horaria, que es la escala en la que se manifiesta la brisa costera.
+# Al ser la fuente oficial, además, cualquiera puede verificar y repetir la descarga.
 #
 # ## 1.3 Fuente y licencia
 #
@@ -191,16 +199,15 @@ def moran_perm(z, W, n=999, rng=RNG):
 # | Presión Atmosférica | https://www.datos.gov.co/d/62tk-nxj5 | 1 h |
 # | Catálogo Nacional de Estaciones del IDEAM | https://www.datos.gov.co/d/hp9r-jxuu | — |
 #
-# * **Filtros de descarga:** departamentos Atlántico, Bolívar, Cesar, Córdoba, La Guajira, Magdalena y
-#   Sucre; años 2020 a 2025; un archivo CSV por variable y año (24 archivos, ≈ 6.4 GB).
-# * **Licencia:** los cinco conjuntos están publicados bajo **Creative Commons Atribución-CompartirIgual
-#   4.0 Internacional (CC BY-SA 4.0)**, con atribución al Instituto de Hidrología, Meteorología y Estudios
-#   Ambientales (IDEAM), según los metadatos de cada conjunto en datos.gov.co
-#   (https://creativecommons.org/licenses/by-sa/4.0/). Se publican como datos abiertos en el marco de la
-#   Ley 1712 de 2014. Por la cláusula "CompartirIgual", este informe se publica con la misma licencia.
-# * **Advertencia de la fuente:** según la ficha del portal, *"los datos … no han sido validados por el
-#   IDEAM"*: son datos crudos de sensores automáticos. Por eso se aplicó un control de calidad propio
-#   (sección 1.6).
+# Descargamos los datos de los departamentos de Atlántico, Bolívar, Cesar, Córdoba, La Guajira, Magdalena y
+# Sucre para los años 2020 a 2025, en un archivo CSV por variable y año (24 archivos, unos 6.4 GB). Los cinco
+# conjuntos se publican bajo la licencia Creative Commons Atribución-CompartirIgual 4.0 Internacional
+# (CC BY-SA 4.0), con atribución al Instituto de Hidrología, Meteorología y Estudios Ambientales (IDEAM)
+# (https://creativecommons.org/licenses/by-sa/4.0/), como datos abiertos en el marco de la Ley 1712 de 2014.
+# Por la cláusula de compartir igual, este documento se publica con la misma licencia.
+#
+# La propia ficha del portal advierte que *"los datos … no han sido validados por el IDEAM"*: son lecturas
+# crudas de sensores automáticos. Por eso dedicamos la sección 1.6 a revisar su calidad.
 
 # %%
 P = pd.read_csv(DATOS / "panel_multivariado.csv", dtype={"CodigoEstacion": str}, parse_dates=["hora"])
@@ -236,17 +243,16 @@ dicc["% de filas del panel con dato"] = [100.0, 100.0, 100.0, 100.0,
 dicc
 
 # %% [markdown]
-# El panel solo contiene horas con **velocidad válida** (es la variable objetivo), así que la velocidad
-# aparece siempre en el 100 % de las filas. Eso no significa cobertura temporal completa: los huecos de
-# cada estación se analizan en la sección 2.6.1. Los porcentajes de las demás variables son
-# condicionales a que haya velocidad.
+# El panel solo guarda las horas con una velocidad válida, porque es la variable que queremos predecir; por
+# eso la velocidad aparece en el 100 % de las filas. Eso no quiere decir que no haya huecos en el tiempo (los
+# analizamos en la sección 2.6.1), y los porcentajes de las demás variables se calculan sobre esas mismas filas.
 #
 # ## 1.5 Estructura y tamaño de la muestra
 #
-# * **Unidad de observación:** estación-hora.
-# * **Nivel de agregación:** las lecturas de 10 min (o 2 min) se promedian por hora; la dirección se
-#   promedia como vector para que 359° y 1° den 0° y no 180°.
-# * **Tipo de datos:** panel espacio-temporal (varias estaciones con coordenadas, observadas cada hora).
+# La unidad de observación es la estación-hora. Las lecturas originales, tomadas cada 10 minutos (o cada 2 en
+# algunos sensores), se promedian por hora; la dirección se promedia como un vector, para que 359° y 1° den
+# 0° y no 180°. El resultado es un panel espacio-temporal: varias estaciones con coordenadas, observadas cada
+# hora.
 
 # %%
 completas = P[["vel", "dir", "temp", "pres"]].notna().all(axis=1)
@@ -264,17 +270,16 @@ print(f"Rango de la variable objetivo: {P.vel.min():.2f} a {P.vel.max():.2f} m/s
 por_anio
 
 # %% [markdown]
-# El panel tiene 76 estaciones con velocidad; **63 de ellas tienen en algún momento las 4 variables**, y
-# el conjunto de modelado final (casos completos, sección 2.0) queda en 62. El tamaño efectivo de la
-# muestra es mucho menor que el número de filas: dentro de cada estación las horas consecutivas están
-# fuertemente autocorrelacionadas (2.6), y las estaciones cercanas también se parecen entre sí (2.7), así
-# que tampoco son del todo independientes. Por eso la validación separa por años completos y por
-# estación.
+# El panel tiene 76 estaciones con velocidad; 63 de ellas tienen en algún momento las cuatro variables, y el
+# conjunto que usamos para modelar (casos completos, sección 2.0) queda en 62. Aunque las filas se cuentan por
+# cientos de miles, la cantidad de información independiente es mucho menor: dentro de cada estación las
+# horas consecutivas se parecen mucho (sección 2.6), y las estaciones cercanas también se parecen entre sí
+# (sección 2.7). Por eso más adelante validamos por periodos y por estación, y no con particiones al azar.
 #
 # ## 1.6 Calidad de datos
 #
-# La auditoría se hizo sobre los 24 archivos crudos. El detalle por variable y año está en
-# `ideam_viento/reportes/`. Resumen:
+# Auditamos los 24 archivos crudos; el detalle por variable y año está en `ideam_viento/reportes/`. Este es
+# el resumen:
 
 # %%
 filas = []
@@ -322,85 +327,77 @@ display(umbral.set_index(["umbral (m/s)", "estaciones"]))
 excl.sort_values(["variable", "anio"])
 
 # %% [markdown]
-# **Reglas de limpieza aplicadas** (en `procesar_variable.py`):
+# Las reglas de limpieza que aplicamos (en `procesar_variable.py`) son las siguientes:
 #
 # | Problema | Regla |
 # |---|---|
-# | Duplicados de descarga (2024–2025) | Se conserva la primera lectura por estación-sensor-instante. En el 99.96 % de los duplicados las lecturas son idénticas; solo 1 236 instantes (de 30 millones de lecturas) tienen valores distintos |
-# | Valores fuera del rango de control | → NaN: velocidad [0, 25] m/s, temperatura [3, 45] °C, presión [500, 1100] hPa. Son **umbrales de control de calidad** para esta red, no límites físicos universales (ver la justificación abajo) |
+# | Duplicados de descarga (2024–2025) | Conservamos la primera lectura de cada estación, sensor e instante. En el 99.96 % de los duplicados las lecturas son idénticas; solo 1 236 instantes (de 30 millones de lecturas) tienen valores distintos |
+# | Valores fuera del rango de control | → NaN: velocidad [0, 25] m/s, temperatura [3, 45] °C, presión [500, 1100] hPa. Son umbrales de control de calidad pensados para esta red, no límites físicos universales (ver la justificación más abajo) |
 # | Sensor defectuoso | Estación-año excluida si > 0.5 % de lecturas fuera de rango (en temperatura, solo lecturas > 45 °C) |
 # | Sensor pegado | Mismo valor ≠ 0 durante ≥ 6 h (12 h en presión), o 0 durante ≥ 24 h → NaN |
 # | Picos de presión | A más de 30 hPa de la mediana de su estación-año → NaN |
 # | Presión incompatible con la altitud | Mediana a > 50 hPa de la presión estándar para la altitud del catálogo → estación-año descartada |
 # | Horas incompletas | Una hora es válida si tiene al menos el 50 % de las lecturas esperadas |
 #
-# **Con qué datos se fijó cada umbral.** Los archivos se descargaron y auditaron por etapas, así que
-# cada umbral se fijó viendo solo una parte de los años. Se declara para que se pueda juzgar si alguno se
-# eligió mirando datos del periodo de prueba (2025):
+# Los archivos los fuimos descargando y revisando por etapas, de modo que cada umbral se fijó conociendo solo
+# una parte de los años. Lo resumimos en la tabla siguiente, porque importa saber si alguno se eligió mirando
+# el periodo que después usamos como prueba (2025):
 #
-# | Umbral | Datos disponibles al fijarlo | ¿Vio datos de 2025? |
+# | Umbral | Datos conocidos al fijarlo | ¿Se conocía 2025? |
 # |---|---|---|
 # | Velocidad: rango [0, 25] m/s, 0.5 % para sensor defectuoso, tramo pegado 6 h (0 durante 24 h) | Solo 2020 | No |
 # | Dirección: rango [0, 360]°, mismos plazos que la velocidad | 2020–2021 | No |
 # | Presión: rango [500, 1100] hPa, picos a > 30 hPa, tramo pegado 12 h, 50 hPa frente a la altitud | 2020–2023 | No |
 # | Temperatura: rango [3, 45] °C y tramo pegado 6 h | 2020–2022 | No |
-# | Temperatura: el criterio de sensor defectuoso cuenta solo lecturas > 45 °C (los 0 °C sueltos solo se enmascaran) | 2020–2025 | **Sí** — solo en la depuración original (EDA) |
+# | Temperatura: el criterio de sensor defectuoso cuenta solo lecturas > 45 °C (los 0 °C sueltos solo se enmascaran) | 2020–2025 | Sí, pero solo se usa en la depuración del análisis exploratorio |
 # | Hora válida con ≥ 50 % de lecturas; ventana de 30 días y mínimo de 100 lecturas (limpieza causal, sección 3) | Fijados a priori, sin ajustarlos a los resultados | No |
 #
-# El único criterio fijado después de ver 2025 es el de sensor defectuoso de la temperatura, y **solo se
-# usa en la depuración original del EDA**. El modelado (sección 3) usa el criterio general, fijado antes
-# de ver 2025 (cualquier lectura fuera de [3, 45] °C cuenta para marcar el sensor), y la sección 3.6
-# comprueba que con el otro criterio el resultado prácticamente no cambia.
+# El único criterio que fijamos después de ver 2025 es el de sensor defectuoso de la temperatura, y solo
+# interviene en la depuración que usa el análisis exploratorio. Para el modelado (sección 3) usamos el
+# criterio general, fijado antes (cualquier lectura fuera de [3, 45] °C cuenta), y en la sección 3.6
+# comprobamos que con el otro criterio el resultado prácticamente no cambia.
 #
-# **Independencia de la validación respecto de los umbrales.** "Fijado antes de ver 2025" no equivale a
-# "fijado antes de cada pliegue de validación": varios umbrales se eligieron viendo datos de 2020–2023
-# (tabla anterior), así que los pliegues de validación de 2021, 2022 y 2023 no son independientes de esa
-# elección. Por eso **la configuración del modelo se elige con una validación cruzada de 4 pliegues
-# cronológicos dentro de 2024** (sección 3.1): esos datos, igual que la prueba de 2025, no se vieron al
-# fijar ningún umbral de limpieza. Los pliegues por años 2021–2023 se muestran solo como referencia. La
-# curva de aprendizaje también valida en 2024.
+# Hay un matiz más: que un umbral se haya fijado antes de 2025 no lo hace independiente de todos los años de
+# validación. Varios se eligieron con datos de 2020 a 2023, así que validar en esos años no sería del todo
+# limpio. Por eso elegimos la configuración del modelo con una validación cruzada de cuatro pliegues dentro de
+# 2024 (sección 3.1), un año que, igual que 2025, no se usó para fijar ningún umbral. Los pliegues de 2021 a
+# 2023 aparecen solo como referencia, y la curva de aprendizaje también se valida en 2024.
 #
-# **Justificación de los umbrales.** Los umbrales se eligieron para esta red a partir de la propia
-# auditoría, no como límites físicos universales. Para no justificar la limpieza con los datos ya
-# limpios, se revisaron **las lecturas eliminadas** directamente en los CSV crudos
-# (`scripts/revisar_umbral.py`, tabla de la celda siguiente):
+# Para justificar los umbrales no basta con mirar los datos ya limpios, así que revisamos directamente en los
+# CSV crudos las lecturas que cada umbral elimina (`scripts/revisar_umbral.py`, tabla de la celda siguiente):
 #
-# * La gran mayoría de las lecturas de velocidad por encima de 25 m/s vienen de dos sensores con fallas
-#   evidentes (Galerazamba y Mongui), que además tienen saltos bruscos y tramos de 0 constante durante
-#   meses.
-# * En las demás estaciones, el 93 % de las lecturas eliminadas tiene su lectura anterior y la siguiente
-#   a no más de dos pasos de muestreo (se comprobó la diferencia de tiempo), y el 59 % son **picos
-#   aislados**: superan en más de 15 m/s a la mediana de esas dos vecinas. Un salto de ese tamaño que
-#   aparece y desaparece en pocos minutos es un **indicio** de anomalía del sensor, no una prueba
-#   definitiva. El resto de las lecturas eliminadas no se puede clasificar con certeza.
-# * **Sensibilidad al umbral:** entre 25 y 30 m/s la diferencia es de unas 70 lecturas crudas fuera de
-#   los sensores dañados. No se evaluó cómo cambiarían el panel horario ni las métricas con otro umbral.
-# * En temperatura, las lecturas por encima de 45 °C aparecen en sensores concretos que repiten
-#   exactamente el mismo valor máximo (50.0 °C), un patrón compatible con un tope del sensor más que
-#   con temperaturas reales. No se pudo confirmar con la ficha técnica del instrumento, así que se
-#   trata como supuesto.
+# * Casi todas las lecturas de velocidad por encima de 25 m/s vienen de dos sensores con fallas evidentes,
+#   Galerazamba y Mongui, que además presentan saltos bruscos y meses enteros marcando 0.
+# * En el resto de las estaciones, el 93 % de las lecturas eliminadas tiene la lectura anterior y la siguiente
+#   a no más de dos intervalos de muestreo, y el 59 % son picos aislados: superan en más de 15 m/s a la
+#   mediana de esas dos vecinas. Un salto de ese tamaño que aparece y desaparece en pocos minutos apunta a una
+#   falla del sensor, aunque no lo prueba; el resto de las lecturas no lo pudimos clasificar con certeza.
+# * Entre un umbral de 25 y uno de 30 m/s la diferencia es de unas 70 lecturas crudas fuera de los sensores
+#   dañados. No evaluamos cómo cambiarían el panel y las métricas con otro umbral.
+# * En temperatura, las lecturas por encima de 45 °C se concentran en sensores que repiten exactamente el mismo
+#   valor máximo, 50.0 °C. Eso parece el tope del instrumento más que una temperatura real, pero no pudimos
+#   confirmarlo con la ficha técnica, así que lo tratamos como un supuesto.
 #
-# **Comprobación con la altitud:** la presión medida coincide con la esperada según la altitud del
-# catálogo (atmósfera estándar) con un error mediano de ≈ 3 hPa, lo que confirma los datos y su
-# conversión (los valores vienen como `"1.003,4"`). Esta misma relación se usó para descartar una sola
-# estación-año (El Guamo 2021, 609 hPa a 75 m), así que no es una validación totalmente independiente,
-# pero sí es independiente para las otras 280 estación-años.
+# La presión ofrece una comprobación adicional: la medida coincide con la esperada para la altitud del
+# catálogo (atmósfera estándar) con un error mediano de unos 3 hPa, lo que respalda tanto los datos como su
+# conversión (los valores vienen escritos como `"1.003,4"`). Usamos esa misma relación para descartar una
+# estación-año (El Guamo 2021, con 609 hPa a 75 m de altitud), así que para ella la comprobación no es
+# independiente, pero sí lo es para las otras 280 estación-años.
 #
-# **Limitación: limpieza retrospectiva.** Varias reglas usan información que no estaría disponible al
-# emitir un pronóstico: estadísticas de la estación-año completa (mediana para los picos de presión,
-# proporción de lecturas anómalas para excluir un sensor), la detección de un tramo pegado completo
-# (que borra sus lecturas desde el inicio del tramo), la frecuencia de muestreo estimada con el archivo
-# completo y la elección del sensor con más horas del año. Es un control de calidad del archivo
-# histórico, no una simulación operativa. La celda siguiente cuantifica cuántas lecturas afectan las dos
-# reglas cuantificables (exclusión de estación-años y tramos pegados o picos); la elección del sensor y la
-# estimación de la frecuencia de muestreo no se pueden medir de la misma forma. La
-# depuración retrospectiva **solo se usa en el EDA**: todo el modelado (sección 3) usa un procesamiento
-# reconstruido desde los CSV originales con reglas causales, en el que cada lectura se limpia solo con
-# información anterior a ella, y la sección 3.6 lo compara con esta depuración original.
+# Varias de estas reglas miran la estación-año completa: la mediana anual para detectar picos de presión, la
+# proporción anual de lecturas anómalas para excluir un sensor, la detección del tramo pegado completo (que
+# borra sus lecturas desde el inicio), la frecuencia de muestreo estimada con todo el archivo y la elección del
+# sensor con más horas en el año. Es un control de calidad razonable para un archivo histórico, pero no
+# reproduce lo que se sabría en el momento de pronosticar. La celda siguiente cuantifica cuántas lecturas
+# afectan las dos reglas medibles (exclusión de estación-años y tramos pegados o picos); la elección del
+# sensor y la frecuencia de muestreo no se pueden medir de la misma forma. Esta depuración la usamos solo
+# para el análisis exploratorio. Para el modelado reconstruimos el procesamiento desde los CSV originales con
+# reglas causales, en las que cada lectura se limpia únicamente con información anterior a ella (sección 3),
+# y en la sección 3.6 comparamos los dos procesamientos.
 
 # %% [markdown]
-# **Casi-duplicados.** Además de los duplicados exactos, se buscan estaciones con las mismas
-# coordenadas, que podrían ser la misma serie registrada con dos códigos.
+# **Casi-duplicados.** Además de los duplicados exactos, buscamos estaciones con las mismas coordenadas, que
+# podrían ser la misma serie registrada con dos códigos distintos.
 
 # %%
 coord_est = P.groupby("est")[["lat", "lon"]].median().round(4)
@@ -444,19 +441,20 @@ for v in ["dir", "temp", "pres"]:
 pd.DataFrame(mec).set_index("variable")
 
 # %% [markdown]
-# **Interpretación.** Los faltantes **no son MCAR**. Por un lado, en buena parte son
-# estructurales: el 68 % de los faltantes de presión, el 50 % de los de dirección y el 19 % de los de
-# temperatura están en estaciones que prácticamente no tienen ese sensor (en el mapa de calor se ven
-# como franjas horizontales completas). Por otro lado, la distribución de la velocidad cambia según
-# falte o no la otra variable (KS significativo), sobre todo con la dirección: cuando falta la
-# dirección, la velocidad media es 1.32 m/s frente a 1.95 m/s, porque con calma la veleta no registra
-# una dirección definida. La **hipótesis más plausible es MAR**: la ausencia parece depender de variables
-# observadas (la estación y la velocidad). Con estos datos **no se puede demostrar** que no dependa
-# también del valor faltante (MNAR); por ejemplo, un sensor de temperatura podría fallar más con calor
-# extremo. La prueba de Little no es aplicable a series tan autocorrelacionadas. Con n grande la prueba KS siempre
-# sale significativa, así que lo que importa es el tamaño del efecto: pequeño para temperatura (0.04) y
-# presión (0.07), moderado para dirección (0.25). Decisión: trabajar con **casos completos** y declarar
-# que el modelo describe las estaciones y horas que tienen las cuatro variables (sección 2.9).
+# Los faltantes no son completamente aleatorios (MCAR). En buena parte son estructurales: el 68 % de los
+# faltantes de presión, el 50 % de los de dirección y el 19 % de los de temperatura corresponden a estaciones
+# que prácticamente no tienen ese sensor, y en el mapa de calor aparecen como franjas horizontales completas.
+# Además, la distribución de la velocidad cambia según falte o no la otra variable (la prueba KS es
+# significativa), sobre todo con la dirección: cuando falta, la velocidad media es de 1.32 m/s frente a
+# 1.95 m/s, porque con calma la veleta no registra una dirección definida.
+#
+# Lo más plausible es un mecanismo MAR, en el que la ausencia depende de variables que sí observamos (la
+# estación y la velocidad). No podemos descartar que también dependa del propio valor faltante (MNAR); por
+# ejemplo, un termómetro podría fallar más con calor extremo. La prueba de Little no es adecuada para series
+# tan autocorrelacionadas, y con tantos datos la prueba KS siempre resulta significativa, así que nos fijamos
+# en el tamaño del efecto: pequeño para la temperatura (0.04) y la presión (0.07) y moderado para la dirección
+# (0.25). Con esto decidimos trabajar con casos completos, entendiendo que el modelo describe las estaciones y
+# horas que tienen las cuatro variables (sección 2.9).
 
 # %% [markdown]
 # ### 1.6.2 Sesgos de muestreo y representatividad
@@ -475,20 +473,20 @@ print("Horas de datos por departamento (%):")
 print((P.depto.value_counts(normalize=True) * 100).round(1).to_string())
 
 # %% [markdown]
-# **Interpretación.** La red cubre los siete departamentos de forma bastante pareja (entre 9 %
-# y 18 % de las horas cada uno), pero **está sesgada hacia zonas bajas**: la mediana de altitud es 75 m
-# y solo unas pocas estaciones están en la Sierra Nevada y el Perijá. Además, la red cambia cada año
-# (de 47 a 66 estaciones) y 2025 tiene casi el doble de estación-horas que 2023. Por eso los resultados
-# describen sobre todo el viento de las tierras bajas del Caribe, y la validación también debe medir
-# qué pasa en estaciones que no se usaron para ajustar el modelo.
+# La red cubre los siete departamentos de manera bastante pareja (entre el 9 % y el 18 % de las horas cada
+# uno), pero está sesgada hacia las zonas bajas: la mediana de altitud es de 75 m y solo unas pocas estaciones
+# están en la Sierra Nevada o en el Perijá. La red también cambia de un año a otro (entre 47 y 66 estaciones),
+# y 2025 tiene casi el doble de estación-horas que 2023. Los resultados describen, por tanto, sobre todo el
+# viento de las tierras bajas del Caribe, y conviene medir también cómo se comporta el modelo en estaciones que
+# no participaron en su ajuste.
 #
 # ### 1.6.3 Consideraciones éticas
 #
-# Los datos son mediciones ambientales de estaciones públicas; no contienen datos personales ni
-# permiten reidentificar individuos. Las coordenadas corresponden a infraestructura pública ya
-# publicada por el IDEAM. El principal riesgo ético es de **uso**: los datos no están validados
-# oficialmente y no deben usarse como evidencia jurídica ni para decisiones de seguridad sin
-# validación adicional, como advierte la propia fuente.
+# Los datos son mediciones ambientales de estaciones públicas: no contienen información personal ni permiten
+# identificar a nadie, y las coordenadas corresponden a infraestructura que el IDEAM ya publica. El riesgo
+# principal está en el uso. Como los datos no están validados oficialmente, no deberían servir como evidencia
+# jurídica ni para tomar decisiones de seguridad sin una validación adicional, tal como advierte la propia
+# fuente.
 
 # %% [markdown]
 # ---
@@ -496,16 +494,16 @@ print((P.depto.value_counts(normalize=True) * 100).round(1).to_string())
 #
 # ## 2.0 Reserva del conjunto de prueba y construcción del conjunto de modelado
 #
-# **Antes de cualquier decisión de modelado se reserva el año 2025 completo como conjunto de prueba.**
-# La sección 1 describe todo el periodo, incluido 2025, solo con fines descriptivos y de control de
-# calidad. Desde aquí, todo el EDA y todas las decisiones de modelado (predictoras, transformaciones,
-# hiperparámetros) usan solo 2020–2024. La lista de vecinos del rezago espacial se define con las
-# coordenadas del catálogo (metadatos estáticos), no con mediciones. La partición es cronológica porque
-# el objetivo es pronosticar el futuro (sección 2.6).
+# Antes de tomar cualquier decisión de modelado apartamos el año 2025 completo como conjunto de prueba. La
+# sección 1 describe todo el periodo, incluido 2025, pero solo con fines descriptivos y de control de calidad;
+# a partir de aquí el análisis exploratorio y todas las decisiones de modelado (predictoras, transformaciones e
+# hiperparámetros) usan únicamente 2020–2024. La lista de vecinos del rezago espacial se define con las
+# coordenadas del catálogo, que son metadatos estáticos. La partición es cronológica porque lo que queremos es
+# pronosticar el futuro (sección 2.6).
 #
-# Las predictoras se construyen por estación sobre una rejilla horaria completa (los huecos quedan
-# como NaN) y usan **solo horas completas hasta la hora t**, que es la información disponible al emitir
-# el pronóstico en t + 1 h. Construirlas no implica ajustar nada con los datos.
+# Las predictoras se construyen estación por estación sobre una rejilla horaria completa, de modo que un hueco
+# queda como NaN en lugar de tomar otra fecha, y usan solo horas completas hasta t, que es lo que se conoce al
+# emitir el pronóstico en t + 1 h. Construirlas no requiere ajustar nada con los datos.
 
 # %%
 PT = P[P.hora < TEST_INI].copy()  # EDA solo con entrenamiento
@@ -612,17 +610,17 @@ axs[2].set(title="Velocidad media por estación", xlabel="longitud", ylabel="lat
 fig.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Interpretación.** La velocidad tiene **asimetría positiva** (1.57) y colas moderadas
-# (curtosis de exceso 3.3): la mediana es 1.5 m/s, pero el 1 % de las horas supera 6.9 m/s. Casi no hay
-# calmas exactas (0.4 % de las horas en 0 m/s). El λ de Yeo-Johnson (−0.43) sugiere que una
-# transformación logarítmica simetrizaría la distribución; si eso mejora el pronóstico se decide en la
-# validación cruzada (sección 3.1). El objetivo tiene tres fuentes claras de variación: un **ciclo
-# diario** fuerte (mínimo hacia las 5 h y máximo hacia las 14 h: la brisa diurna), un **ciclo anual**
-# (más viento de diciembre a marzo, la temporada seca de los alisios) y **diferencias fijas entre
-# estaciones** (La Guajira, al noreste, supera los 4–5 m/s de media, mientras que el interior de
-# Córdoba y Bolívar ronda 1 m/s). Implicaciones: las métricas también deben calcularse por estación,
-# porque el R² global se infla con las diferencias entre estaciones, y los ciclos diario y anual deben
-# entrar como predictoras.
+# La velocidad tiene asimetría positiva (1.57) y colas moderadas (curtosis de exceso de 3.3): la mediana es de
+# 1.5 m/s, pero el 1 % de las horas supera los 6.9 m/s. Las calmas exactas son raras (0.4 % de las horas en
+# 0 m/s). El λ de Yeo-Johnson (−0.43) sugiere que un logaritmo haría más simétrica la distribución; si eso
+# mejora o no el pronóstico lo decide la validación cruzada (sección 3.1).
+#
+# En los gráficos se ven tres fuentes claras de variación: un ciclo diario fuerte, con el mínimo hacia las 5 h
+# y el máximo hacia las 14 h (la brisa diurna); un ciclo anual, con más viento de diciembre a marzo, en la
+# temporada seca de los alisios; y diferencias fijas entre estaciones, porque La Guajira, al noreste, supera
+# los 4–5 m/s de media, mientras que el interior de Córdoba y Bolívar ronda 1 m/s. De aquí salen dos
+# consecuencias para el modelado: las métricas deben calcularse también por estación, porque el R² global se
+# infla con esas diferencias fijas, y los ciclos diario y anual deben entrar como predictoras.
 
 # %% [markdown]
 # ## 2.2 Análisis unidimensional
@@ -678,18 +676,19 @@ cat = pd.DataFrame({"estaciones": est.categoria.value_counts(),
 cat
 
 # %% [markdown]
-# **Interpretación.** Ninguna variable es normal. Con n grande las pruebas siempre rechazan, pero la
-# asimetría y la curtosis lo confirman. La **presión** es bimodal y muy asimétrica (−3.5) porque mezcla
-# estaciones costeras (≈ 1010 hPa) con estaciones de montaña (≈ 780 hPa): sus "atípicos" por IQR (10 %)
-# no son errores sino altitud. Por eso la presión se usa junto con la altitud y como tendencia (cambio
-# en 3 y 24 h). La **constancia de la dirección** se concentra cerca de 1 (dirección estable dentro de
-# la hora), con una cola de horas de viento variable. La **dirección** es circular, así que su media
-# aritmética no tiene sentido. La rosa de vientos muestra que predominan los vientos del noreste y del
-# este (los alisios), que además son los más fuertes. Como la red mezcla regímenes opuestos, el vector
-# medio global es casi nulo (0.06): la dirección debe tratarse por estación y como componentes u/w. En
-# las categóricas, "Sinóptica Secundaria" tiene una sola estación, y "Pluviométrica" y
-# "Agrometeorológica" cuatro cada una: son categorías raras, así que la categoría no se usa como
-# predictora.
+# Ninguna variable sigue una distribución normal. Con tantos datos las pruebas de normalidad siempre rechazan,
+# pero la asimetría y la curtosis apuntan en la misma dirección. La presión es bimodal y muy asimétrica (−3.5)
+# porque mezcla estaciones costeras (≈ 1010 hPa) con estaciones de montaña (≈ 780 hPa); sus "atípicos" por IQR
+# (10 %) no son errores sino altitud, y por eso la usamos junto con la altitud y como tendencia (su cambio en 3 y
+# en 24 h). La constancia de la dirección se concentra cerca de 1 (dirección estable dentro de la hora), con
+# una cola de horas de viento variable.
+#
+# La dirección es circular, así que su media aritmética no tiene sentido. La rosa de vientos muestra que
+# predominan los vientos del noreste y del este, los alisios, que además son los más fuertes. Como la red
+# mezcla regímenes opuestos, el vector medio global es casi nulo (0.06), y la dirección tiene que tratarse por
+# estación y en forma de componentes u/w. Entre las variables categóricas, "Sinóptica Secundaria" tiene una
+# sola estación y "Pluviométrica" y "Agrometeorológica" cuatro cada una; son categorías tan raras que no usamos
+# la categoría de la estación como predictora.
 
 # %% [markdown]
 # ## 2.3 Análisis bidimensional
@@ -717,10 +716,9 @@ fig.tight_layout(); plt.show()
 # %% [markdown]
 # ### 2.3.2 Categóricas vs. numéricas y categóricas vs. categóricas
 #
-# Con n grande casi toda diferencia es significativa, así que se reportan tamaños de efecto
-# (ε² de Kruskal-Wallis, V de Cramér) y la corrección de Holm por comparaciones múltiples. Las
-# pruebas se hacen **a nivel de estación** (n ≈ 70) para no inflar la significancia con horas
-# autocorrelacionadas.
+# Con tantos datos casi cualquier diferencia resulta significativa, así que reportamos también tamaños de
+# efecto (ε² de Kruskal-Wallis y V de Cramér) y corregimos por comparaciones múltiples con el método de Holm.
+# Las pruebas se hacen por estación (n ≈ 70), para no inflar la significancia con horas autocorrelacionadas.
 
 # %%
 est["vel_media"] = PT.groupby("est").vel.mean().reindex(est.index)
@@ -764,22 +762,23 @@ ax.set_title("Correlación de Pearson entre predictoras y objetivo (train)")
 fig.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Interpretación.**
+# La velocidad se asocia con la temperatura, porque las horas más cálidas son también las más ventosas por el
+# ciclo diario, y con la dirección. Con la presión la correlación agregada es casi nula, ya que la presión
+# refleja sobre todo la altitud de cada estación.
 #
-# * **Entre variables:** la velocidad se asocia con la temperatura (las horas más cálidas
-#   tienen más viento, por el ciclo diario) y con la dirección. Con la presión la correlación agregada
-#   es casi nula, porque la presión refleja sobre todo la altitud.
-# * **Entre grupos (a nivel de estación):** tras la corrección de Holm, solo el departamento se asocia
-#   de forma significativa con la velocidad media, con un efecto grande (ε² = 0.31): es el gradiente
-#   del noreste (La Guajira) al suroeste. Departamento y categoría son independientes (p = 0.77).
-# * **Con el objetivo:** las predictoras más informativas son la velocidad actual y sus rezagos de
-#   1–3 h y de 23 h (Spearman 0.65–0.76; información mutua 0.34–0.50). Las componentes u/w y la altitud
-#   tienen información mutua alta pero correlación baja: su relación con el objetivo es **no lineal**, y
-#   un modelo lineal no la aprovecha del todo. Temperatura, presión y calendario aportan poco por
-#   separado.
-# * **Multicolinealidad:** los rezagos de velocidad (VIF entre 5 y 24) y el par altitud–presión
-#   (VIF ≈ 56) son muy redundantes. Esto no impide predecir, pero obliga a interpretar los coeficientes
-#   con cautela y justifica la regularización del SVR.
+# Entre grupos, y después de la corrección de Holm, solo el departamento se asocia de forma significativa con
+# la velocidad media de la estación, con un efecto grande (ε² = 0.31) que refleja el gradiente que va de La
+# Guajira, al noreste, hacia el suroeste. El departamento y la categoría de la estación son independientes
+# (p = 0.77).
+#
+# Frente al objetivo, las predictoras más informativas son la velocidad actual y sus rezagos de 1 a 3 h y de
+# 23 h (Spearman entre 0.65 y 0.76; información mutua entre 0.34 y 0.50). Las componentes u/w y la altitud
+# tienen una información mutua alta pero una correlación baja, lo que indica una relación no lineal que un
+# modelo lineal no aprovecha del todo. La temperatura, la presión y el calendario aportan poco por separado.
+#
+# Los rezagos de velocidad (VIF entre 5 y 24) y el par altitud–presión (VIF ≈ 56) son muy redundantes. Eso no
+# impide predecir, pero obliga a interpretar los coeficientes con cautela y justifica usar un modelo
+# regularizado.
 
 # %% [markdown]
 # ## 2.4 Análisis multivariado
@@ -836,30 +835,29 @@ plt.show()
 perfil.groupby("grupo").mean().round(2).assign(estaciones=perfil.grupo.value_counts().sort_index())
 
 # %% [markdown]
-# **Interpretación.**
+# Hacen falta 14 de las 26 componentes principales para explicar el 90 % de la varianza. La primera recoge el
+# "nivel de viento" (todos los rezagos de velocidad) y las siguientes separan, por un lado, la dirección y la
+# época del año y, por otro, la altitud y la presión. Hay mucha redundancia dentro de cada grupo de variables,
+# pero los grupos aportan información distinta entre sí.
 #
-# * **Dimensionalidad efectiva:** se necesitan 14 de las 26 componentes para explicar el
-#   90 % de la varianza. La PC1 es el "nivel de viento" (todos los rezagos de velocidad) y las
-#   siguientes separan la dirección y la estación del año, y la altitud y la presión. Hay mucha
-#   redundancia dentro de cada grupo de variables, pero entre grupos aportan información distinta.
-# * **Atípicos multivariados:** en relación con la climatología de cada estación, el 1.2 % de las
-#   horas son atípicas según Mahalanobis (umbral χ² al 99.9 %), y todas lo son también para Isolation
-#   Forest. Lo que tienen en común es una dirección muy variable dentro de la hora (constancia de −3.3
-#   desviaciones), con algo más de viento: son horas de ráfagas o de cambio de régimen. Como son
-#   fenómenos reales, no se eliminan.
-# * **Subpoblaciones:** el k-means sobre el perfil de cada estación separa 3 regímenes: (0) 30
-#   estaciones ventosas del norte y la costa (2.8 m/s, ciclo diario amplio), (1) 33 estaciones de
-#   tierras bajas del interior con poco viento (1.3 m/s) y (2) 7 estaciones de montaña (1 400 m, 20 °C).
-#   Estas diferencias estructurales son las que inflan el R² global.
+# Comparando cada hora con la climatología de su propia estación, el 1.2 % de las horas son atípicas según la
+# distancia de Mahalanobis (umbral χ² al 99.9 %), y todas lo son también para Isolation Forest. Lo que tienen
+# en común es una dirección muy variable dentro de la hora (la constancia está 3.3 desviaciones por debajo de lo
+# normal) y algo más de viento: son horas de ráfagas o de cambio de régimen. Como se trata de fenómenos reales,
+# no las eliminamos.
+#
+# El k-means sobre el perfil de cada estación separa tres regímenes: 30 estaciones ventosas del norte y de la
+# costa (2.8 m/s de media y un ciclo diario amplio), 33 estaciones de tierras bajas del interior con poco viento
+# (1.3 m/s) y 7 estaciones de montaña (1 400 m de altitud y 20 °C). Estas diferencias estructurales son las que
+# inflan el R² global.
 
 # %% [markdown]
 # ## 2.5 Auditoría de fuga de datos
 #
-# **Disponibilidad en el momento de la predicción.** El pronóstico se emite en t + 1 h, al cerrarse la
-# hora t, para la hora que empieza en t + 24 h (sección 1.1). Todas las predictoras usan horas completas
-# hasta t, incluidas las de las estaciones vecinas.
+# El pronóstico se emite en t + 1 h, cuando termina la hora t, para la hora que empieza en t + 24 h (sección
+# 1.1). Todas las predictoras usan horas completas hasta t, también las de las estaciones vecinas:
 #
-# | Predictoras | Ventana | ¿Disponible en t? |
+# | Predictoras | Ventana | ¿Se conoce al emitir el pronóstico? |
 # |---|---|---|
 # | `vel_l0 … vel_l23`, `vel_m24` | velocidad de t−23 a t | Sí |
 # | `u, w, u_m24, w_m24, dir_constancia` | dirección y velocidad hasta t (u, w: velocidad media × vector medio de dirección, una aproximación de las componentes medias del viento) | Sí |
@@ -869,9 +867,9 @@ perfil.groupby("grupo").mean().round(2).assign(estaciones=perfil.grupo.value_cou
 # | `hy_sin, hy_cos, doy_sin, doy_cos` | hora y día del año **del objetivo** | Sí: el calendario es conocido de antemano |
 # | `altitud` | catálogo | Sí (estática) |
 #
-# No hay variables derivadas del objetivo ni identificadores como predictoras. Se evalúa además el
-# desempeño univariado de cada predictora, ajustado en 2020–2023 y medido en 2024 (sin tocar la
-# prueba): un valor cercano a 1 sería señal de alerta.
+# Ninguna predictora se deriva del objetivo ni funciona como identificador de la estación. Como control
+# adicional medimos el desempeño de cada predictora por separado, ajustada en 2020–2023 y evaluada en 2024, sin
+# tocar la prueba; un valor cercano a 1 sería una señal de alarma.
 
 # %%
 tr_a, va_a = TR[TR.t_y < "2024-01-01"], TR[(TR.t >= "2024-01-01")]
@@ -895,14 +893,16 @@ chequeos = pd.Series({
 display(tabla_fuga.head(10)); chequeos
 
 # %% [markdown]
-# **Interpretación.** Ninguna predictora tiene un desempeño univariado sospechoso. La mejor, la velocidad
-# actual, explica por sí sola el 59 % en 2024, que es justamente el nivel de la persistencia. Como
-# contraste, una variable con fuga (la velocidad de la hora t + 23, la anterior al objetivo, que aún no
-# se conoce al emitir el pronóstico) alcanza sola R² = 0.85. No hay objetivos de entrenamiento dentro de 2025 ni filas duplicadas. El 92 % de las filas
-# de prueba son de estaciones que también están en entrenamiento. Es lo esperado en un pronóstico
-# temporal, donde se predice el futuro de estaciones conocidas; por eso la generalización a estaciones
-# nuevas se evalúa aparte con `GroupKFold`. **Variables descartadas o en observación:** ninguna se
-# descarta por fuga; la categoría de la estación se descarta por tener categorías raras (2.2).
+# Ninguna predictora tiene un desempeño sospechoso por sí sola. La mejor, la velocidad actual, explica el 59 %
+# de la variación en 2024, que es justamente lo que logra la persistencia. Para tener una referencia de cómo se
+# vería una fuga, construimos a propósito una variable que no debería estar disponible: la velocidad de la hora
+# t + 23, la anterior al objetivo. Sola alcanza un R² de 0.85.
+#
+# No hay objetivos de entrenamiento dentro de 2025 ni filas duplicadas. El 92 % de las filas de prueba
+# corresponde a estaciones que también están en el entrenamiento, lo cual es normal en un pronóstico temporal,
+# donde se predice el futuro de estaciones conocidas; la generalización a estaciones nuevas la evaluamos aparte
+# con `GroupKFold`. No descartamos ninguna variable por fuga; la categoría de la estación queda fuera por tener
+# categorías demasiado raras (sección 2.2).
 
 # %% [markdown]
 # ## 2.6 Componente temporal
@@ -917,8 +917,8 @@ h_vel = PT.groupby(PT.hora.dt.hour).vel.median().idxmax()
 h_tmp = PT.groupby(PT.hora.dt.hour).temp.median().idxmax()
 print(f"Zona horaria: la temperatura mediana es máxima a las {h_tmp} h y el viento a las {h_vel} h. En hora local "
       "ambos máximos se esperan a primera hora de la tarde; si las marcas estuvieran en UTC aparecerían 5 h más "
-      "tarde (18–20 h). Esto respalda el SUPUESTO de hora local de Colombia (UTC−5, sin horario de verano); "
-      "no se encontró una especificación explícita de la zona horaria en la fuente, así que queda como supuesto.")
+      "tarde (18–20 h). Suponemos hora local de Colombia (UTC−5, sin horario de verano); la fuente no especifica "
+      "la zona horaria.")
 print("Frecuencia: horaria regular")
 print(f"Marcas de tiempo duplicadas (estación, hora): {dups}")
 print(f"Huecos (> 1 h) dentro de cada estación: {len(huecos):,} | mediana {huecos.median():.0f} h | "
@@ -954,16 +954,16 @@ axs[2].set(title="Velocidad por día de la semana (0 = lunes)", xlabel="", ylabe
 fig.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Cambios de régimen, eventos y calendario (análisis exploratorio).** La red cambia de un mes a otro,
-# así que un promedio simple de la red podría mostrar "cambios" que solo reflejan qué estaciones
-# reportaron. Para reducir ese efecto se calcula la **anomalía de cada estación respecto a su propia
-# climatología mensual** (su media de ese mes en 2020–2024) y luego se promedian las anomalías de las
-# estaciones presentes. Así, una estación ventosa que entra o sale de la red no desplaza el promedio.
-# Solo se usan meses con al menos 15 estaciones, y la composición de cada mes se muestra en el gráfico.
-# Sobre esa serie se aplica la prueba de Pettitt y se superponen los eventos ENSO del periodo
-# según el Índice Oceánico El Niño (ONI) de NOAA: **La Niña** de mediados de 2020 a inicios de 2023 y
-# **El Niño** de mediados de 2023 a mediados de 2024. Los feriados no se analizan por separado: el viento
-# es una variable física y el día de la semana no muestra ningún efecto.
+# **Cambios de régimen, eventos y calendario.** Como la red cambia de un mes a otro, un promedio simple podría
+# mostrar "cambios" que solo reflejan qué estaciones reportaron. Para evitarlo calculamos la anomalía de cada
+# estación respecto a su propia climatología mensual (su media de ese mes en 2020–2024) y promediamos las
+# anomalías de las estaciones presentes; así, una estación ventosa que entra o sale de la red no desplaza el
+# promedio. Solo usamos meses con al menos 15 estaciones, y el gráfico muestra cuántas aporta cada mes.
+#
+# Sobre esa serie aplicamos la prueba de Pettitt y marcamos los eventos ENSO del periodo según el Índice
+# Oceánico El Niño (ONI) de la NOAA: La Niña, de mediados de 2020 a inicios de 2023, y El Niño, de mediados de
+# 2023 a mediados de 2024. No analizamos los feriados por separado, porque el viento es una variable física y el
+# día de la semana no muestra ningún efecto.
 
 # %%
 def pettitt(x):
@@ -1006,25 +1006,24 @@ enso = pd.Series(np.select([(x_ >= "2020-08-01") & (x_ <= "2023-02-28"), (x_ >= 
 print("Anomalía media por fase ENSO (m/s):", anom_red.groupby(enso).mean().round(3).to_dict())
 
 # %% [markdown]
-# **Interpretación (exploratoria).** Con las anomalías de cada estación respecto a su propia
-# climatología, la prueba de Pettitt señala un cambio en **febrero de 2022** (p = 0.003), pero de tamaño
-# despreciable: la anomalía media pasa de +0.04 a −0.05 m/s. Las diferencias entre fases ENSO también son
-# mínimas (−0.01 m/s en La Niña, +0.04 m/s en El Niño). En una versión anterior de este análisis, que
-# promediaba directamente la velocidad de la red, aparecía un cambio de +0.3 m/s en abril de 2023 que
-# coincidía con el paso de La Niña a El Niño; al controlar la composición de la red ese cambio
-# desaparece, así que **era sobre todo un efecto de qué estaciones reportaban cada mes**. Dos
-# advertencias: solo 42 de los 60 meses tienen al menos 15 estaciones y solo una estación está presente
-# en todos ellos; y una estación que solo reporta parte del periodo absorbe en su propia climatología
-# parte de la variación entre años. Por eso **no se puede afirmar ni descartar un efecto de ENSO** con
-# estos datos. **Consecuencia para el modelado:** no hay evidencia de un cambio de régimen que obligue a
-# tratar los años por separado, pero la variación entre años se sigue controlando con la validación por
-# años completos.
+# Con las anomalías por estación, la prueba de Pettitt señala un cambio en febrero de 2022 (p = 0.003), pero de
+# un tamaño despreciable: la anomalía media pasa de +0.04 a −0.05 m/s. Las diferencias entre las fases de ENSO
+# también son mínimas (−0.01 m/s en La Niña y +0.04 m/s en El Niño). En una primera versión de este análisis,
+# que promediaba directamente la velocidad de toda la red, aparecía un cambio de +0.3 m/s en abril de 2023 que
+# coincidía con el paso de La Niña a El Niño; al controlar la composición de la red ese cambio desaparece, así
+# que se debía sobre todo a qué estaciones reportaban cada mes.
+#
+# Hay dos advertencias: solo 42 de los 60 meses tienen al menos 15 estaciones (y solo una estación aparece en
+# todos ellos), y una estación que reporta solo parte del periodo absorbe en su propia climatología parte de la
+# variación entre años. Con estos datos, entonces, no podemos afirmar ni descartar un efecto de ENSO. Para el
+# modelado, no vemos un cambio de régimen que obligue a tratar los años por separado, y la variación entre años
+# queda cubierta por la validación por periodos.
 
 # %% [markdown]
 # ### 2.6.3 Descomposición, estacionariedad y dependencia temporal
 #
-# Se usa como ejemplo la estación con mejor cobertura en 2020–2024, y las pruebas de
-# estacionariedad se aplican a todas las estaciones con al menos un año de datos diarios.
+# Usamos como ejemplo la estación con mejor cobertura en 2020–2024 y aplicamos las pruebas de
+# estacionariedad a todas las estaciones con al menos un año continuo de datos diarios.
 
 # %%
 e_rep = PT.groupby("est").vel.count().idxmax()
@@ -1127,35 +1126,33 @@ axs[1].set(title="Amplitud del ciclo diario por estación", xlabel="m/s")
 fig.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Interpretación.**
+# La frecuencia es horaria y regular, sin marcas de tiempo duplicadas. La fuente no indica la zona horaria,
+# pero el ciclo diario de la temperatura y del viento solo tiene sentido en hora local, así que trabajamos con
+# ese supuesto. Hay unos 22 000 huecos, casi todos cortos (la mediana es de 3 h), aunque algunas estaciones dejan
+# de reportar durante meses o años; por eso los rezagos se construyen sobre la rejilla horaria real, donde un
+# hueco queda como NaN y nunca se toma otra fecha en su lugar.
 #
-# * **Calidad temporal:** la frecuencia es horaria y regular, sin marcas duplicadas, y el ciclo diario
-#   de temperatura y viento respalda el supuesto de que las horas están en hora local (la fuente no lo
-#   especifica). Hay
-#   unos 22 000 huecos, casi todos cortos (mediana de 3 h), pero también estaciones que dejan de
-#   reportar durante meses o años. Por eso los rezagos solo se construyen sobre la rejilla horaria real:
-#   ante un hueco queda NaN, nunca se "salta" a otra fecha.
-# * **Estacionalidad:** en la estación de ejemplo, el ciclo diario explica el 83 % de la variación
-#   horaria no tendencial y el ciclo anual el 94 % de la variación diaria; la tendencia es nula en
-#   2020–2024. El día de la semana no influye, como es de esperar en una variable física.
-# * **Estacionariedad:** en las series diarias originales, KPSS rechaza la estacionariedad en todas las
-#   estaciones analizadas y ADF solo la respalda en un tercio: la media cambia con la temporada. Una vez
-#   quitado el ciclo anual, ADF rechaza la raíz unitaria en el 100 % de las estaciones y KPSS no rechaza
-#   la estacionariedad en el 67 %. Las pruebas son **compatibles** con series estacionarias alrededor de
-#   su ciclo estacional, aunque solo cubren 18 estaciones con al menos un año continuo; no permiten
-#   concluir lo mismo para toda la red. Esto respalda usar el día del año como predictora.
-# * **Dependencia:** la ACF oscila con un período de 24 h y la PACF tiene picos en 1 h y alrededor de
-#   24 h. La correlación de cada predictora con la velocidad k horas después (calculada por fecha
-#   exacta) muestra que la de la velocidad actual cae hasta k ≈ 12 h y **vuelve a subir en k = 24 h**: la
-#   mejor información para pronosticar a 24 h es la velocidad de hoy a la misma hora y la de las horas
-#   previas. La componente u (viento del este) y la velocidad de los vecinos mantienen una correlación
-#   estable con el viento futuro.
-# * **Deriva:** los cambios de distribución entre años son pequeños (KS ≤ 0.14). Los mayores están en
-#   presión y temperatura en 2023–2024, cuando cambió la red de estaciones. La relación entre la
-#   velocidad actual y la de 24 h después varía entre años (r entre 0.76 y 0.89): hay algo de *concept
-#   drift*, que la validación por años completos captura.
-# * **Heterogeneidad del panel:** la velocidad media por estación va de menos de 1 a más de 5 m/s, y la
-#   amplitud del ciclo diario de menos de 0.5 a más de 3 m/s.
+# En la estación de ejemplo, el ciclo diario explica el 83 % de la variación horaria sin tendencia y el ciclo
+# anual el 94 % de la variación diaria, mientras que la tendencia en 2020–2024 es nula. El día de la semana no
+# influye, como cabe esperar de una variable física.
+#
+# En las series diarias originales, KPSS rechaza la estacionariedad en todas las estaciones analizadas y ADF
+# solo la respalda en un tercio: la media cambia con la temporada. Una vez quitado el ciclo anual, ADF rechaza
+# la raíz unitaria en el 100 % de las estaciones y KPSS no rechaza la estacionariedad en el 67 %. Las series
+# parecen, por tanto, estacionarias alrededor de su ciclo estacional, aunque la prueba solo cubre las 18
+# estaciones con al menos un año continuo. Esto respalda incluir el día del año como predictora.
+#
+# La ACF oscila con un periodo de 24 h y la PACF tiene picos en 1 h y alrededor de 24 h. La correlación entre la
+# velocidad actual y la velocidad k horas después (calculada por fecha exacta) baja hasta k ≈ 12 h y vuelve a
+# subir en k = 24 h: para pronosticar a un día, lo más informativo es la velocidad de hoy a la misma hora y la de
+# las horas previas. La componente u (viento del este) y la velocidad de los vecinos mantienen una correlación
+# estable con el viento futuro.
+#
+# Los cambios de distribución entre años son pequeños (KS ≤ 0.14); los mayores aparecen en la presión y la
+# temperatura en 2023–2024, cuando cambió la red de estaciones. La relación entre la velocidad de hoy y la de
+# mañana también varía entre años (r entre 0.76 y 0.89), una forma leve de *concept drift* que la validación por
+# periodos permite medir. Por último, las estaciones son muy distintas entre sí: la velocidad media va de menos de
+# 1 a más de 5 m/s, y la amplitud del ciclo diario de menos de 0.5 a más de 3 m/s.
 
 # %% [markdown]
 # ## 2.7 Componente espacial
@@ -1258,9 +1255,9 @@ print("Velocidad media por departamento (m/s):", {k: round(v, 2) for k, v in sor
 # %% [markdown]
 # ### 2.7.3 Autocorrelación espacial
 #
-# Matriz de pesos: **4 vecinos más cercanos**, estandarizada por filas. Se eligen k vecinos (y no una
-# banda de distancia) porque la densidad de estaciones es muy desigual: con una banda fija, las
-# estaciones aisladas de La Guajira quedarían sin vecinos.
+# Como matriz de pesos usamos los 4 vecinos más cercanos, estandarizada por filas. Preferimos k vecinos a una
+# banda de distancia fija porque la densidad de estaciones es muy desigual y, con una banda, las estaciones
+# aisladas de La Guajira quedarían sin vecinos.
 
 # %%
 e_ok = est.dropna(subset=["vel_media"])
@@ -1332,45 +1329,43 @@ print("Efecto de la escala de agregación (MAUP): correlaciones con estaciones v
 mau
 
 # %% [markdown]
-# **Interpretación.**
+# Todas las estaciones pertenecen a los siete departamentos seleccionados, y no hay coordenadas (0, 0) ni
+# latitudes y longitudes invertidas. La caja envolvente llega hasta 7.5 °N porque el sur de Bolívar y de
+# Córdoba se extiende por debajo de 8 °N. Dos estaciones comparten coordenadas, probablemente dos sensores del
+# mismo sitio con códigos distintos, y las mantenemos como entidades separadas.
 #
-# * **Coordenadas válidas:** todas las estaciones pertenecen a los 7 departamentos seleccionados, sin
-#   (0, 0) ni latitud y longitud invertidas. La caja envolvente llega hasta 7.5 °N porque el sur de
-#   Bolívar y de Córdoba se extiende por debajo de 8 °N. Dos estaciones comparten coordenadas
-#   (probablemente dos sensores del mismo sitio con códigos distintos); se mantienen como entidades
-#   separadas.
-# * **Mapa base y coropleta:** sobre los límites departamentales se ve que casi todas las estaciones
-#   están en las tierras bajas y la costa, con huecos en la Sierra Nevada, el interior de La Guajira y el
-#   sur de Bolívar. La coropleta muestra a La Guajira muy por encima del resto, pero un promedio
-#   departamental mezcla sitios muy distintos (costa y montaña); por eso el análisis se hace por
-#   estación (ver MAUP más abajo).
-# * **Patrón de puntos:** el índice de Clark-Evans sugiere un espaciamiento algo más regular que al azar
-#   (R = 1.16, sin prueba de significancia; la función de Ripley de abajo no detecta diferencias con el azar), con una mediana de 26 km al vecino más cercano. Hay zonas con poca cobertura,
-#   como el sur de Bolívar y el interior de La Guajira.
-# * **Autocorrelación espacial:** fuerte y significativa (I de Moran = 0.45, p = 0.001). El LISA, con
-#   corrección FDR por las pruebas múltiples, identifica un único agrupamiento: el **hotspot alto-alto de La Guajira** (5 estaciones; 8 sin corregir). Los mapas LISA son **exploratorios**. El
-#   semivariograma crece con la distancia y alcanza la varianza total hacia los 250 km: las estaciones a
-#   menos de ~100 km tienen velocidades medias parecidas.
-# * **Patrón de puntos a distintas escalas:** usando la misma ventana (el polígono convexo de las
-#   estaciones) para los datos y para las simulaciones, la función L de Ripley queda **dentro de la
-#   envolvente de aleatoriedad espacial completa (CSR) entre 5 y 150 km**: no hay evidencia de
-#   agrupamiento ni de regularidad a esas escalas (el estimador no corrige el efecto de borde). DBSCAN
-#   (haversine, 40 km) encuentra 7 grupos de estaciones cercanas y deja 21 aisladas, sobre todo en el
-#   sur de Córdoba y Bolívar y en La Guajira: son las **zonas con menor cobertura**.
-# * **Hotspots de Getis-Ord Gi\*:** con corrección FDR, 5 estaciones del norte de La Guajira (Puerto
-#   Bolívar, Sillamana, Toromana, Ipichirrain, Puerto Estrella) forman el único hotspot significativo,
-#   lo que confirma el resultado del LISA.
-# * **Escala de agregación (MAUP):** la correlación entre velocidad y temperatura cambia al pasar de
-#   estaciones a medias por departamento (tabla anterior). Con solo 7 departamentos las correlaciones
-#   agregadas son muy inestables, y los departamentos mezclan costa y montaña. Por eso todo el análisis
-#   se hace a escala de estación y no de departamento.
-# * **Latitud y longitud crudas** no se usan como predictoras: con un modelo lineal solo representarían
-#   un gradiente plano, y la información espacial ya entra por la altitud y el rezago espacial. Tampoco
-#   se usan celdas H3/geohash, porque con 76 estaciones casi todas las celdas tendrían una sola.
-# * **Consecuencia:** una validación aleatoria sería optimista, porque las estaciones vecinas se
-#   parecen. Por eso, además de `GroupKFold` por estación, la sección 3.2 evalúa **bloques geográficos
-#   con zona de separación (buffer)**, y el promedio de los vecinos se usa como predictora (rezago
-#   espacial).
+# Sobre el mapa base se ve que casi todas las estaciones están en las tierras bajas y en la costa, con huecos en
+# la Sierra Nevada, el interior de La Guajira y el sur de Bolívar. La coropleta pone a La Guajira muy por encima
+# del resto, aunque un promedio por departamento mezcla sitios muy distintos, como costa y montaña; por eso el
+# análisis se hace por estación (ver el efecto de la escala más abajo).
+#
+# El índice de Clark-Evans sugiere un espaciamiento algo más regular que al azar (R = 1.16, sin prueba de
+# significancia), con una mediana de 26 km hasta el vecino más cercano. La función L de Ripley, calculada con la
+# misma ventana (el polígono convexo de las estaciones) para los datos y para las simulaciones, queda dentro de
+# la envolvente de aleatoriedad espacial completa entre 5 y 150 km, así que a esas escalas no hay evidencia de
+# agrupamiento ni de regularidad (el estimador no corrige el efecto de borde). DBSCAN, con distancia haversine y
+# un radio de 40 km, encuentra 7 grupos de estaciones cercanas y deja 21 aisladas, sobre todo en el sur de
+# Córdoba y Bolívar y en La Guajira, que son las zonas con menos cobertura.
+#
+# La autocorrelación espacial es fuerte y significativa (I de Moran = 0.45, p = 0.001). Con corrección FDR por
+# las múltiples pruebas locales, el LISA encuentra un único agrupamiento, el de valores altos en La Guajira (5
+# estaciones; 8 sin corregir), y Getis-Ord Gi* señala el mismo hotspot en el norte de La Guajira (Puerto
+# Bolívar, Sillamana, Toromana, Ipichirrain y Puerto Estrella). Tomamos estos mapas locales como exploratorios.
+# El semivariograma crece con la distancia y alcanza la varianza total hacia los 250 km: las estaciones a menos
+# de unos 100 km tienen velocidades medias parecidas.
+#
+# La escala de agregación también importa (el problema de la unidad de área modificable, MAUP): la correlación
+# entre velocidad y temperatura cambia al pasar de estaciones a promedios por departamento (tabla anterior). Con
+# solo siete departamentos las correlaciones agregadas son muy inestables y además mezclan costa y montaña, así
+# que trabajamos siempre a escala de estación.
+#
+# No usamos la latitud y la longitud crudas como predictoras: en un modelo lineal solo representarían un
+# gradiente plano, y la información espacial ya entra por la altitud y por el rezago espacial. Tampoco usamos
+# celdas H3 o geohash, porque con 76 estaciones casi todas las celdas tendrían una sola.
+#
+# Como las estaciones vecinas se parecen, una validación al azar sería optimista. Por eso, además de
+# `GroupKFold` por estación, en la sección 3.2 evaluamos bloques geográficos con una zona de separación, y
+# usamos el promedio de los vecinos como predictora (rezago espacial).
 
 # %% [markdown]
 # ## 2.8 Componente espacio-temporal
@@ -1412,32 +1407,33 @@ axs[2].legend()
 fig.tight_layout(); plt.show()
 
 # %% [markdown]
-# **Diseño de la validación derivado de 2.6–2.8.** El objetivo principal es **pronosticar el futuro en
-# estaciones conocidas**, así que la validación principal es cronológica por años completos. Como
-# objetivo secundario se evalúa la **generalización a estaciones que no se usaron para ajustar el
-# modelo** con `GroupKFold` por estación. Ese escenario representa una **estación nueva de la red, que ya
-# tiene su propio historial y vecinos con sensores**, no un sitio sin mediciones: el modelo sigue usando
-# la velocidad pasada de la estación y la de sus vecinos. `GroupKFold` tampoco garantiza que las
-# estaciones de prueba estén lejos de las de entrenamiento; por eso se agrega un tercer esquema,
-# **bloques geográficos con buffer** (sección 3.2). Los esquemas se reportan por separado.
+# **Diseño de la validación.** Nuestro objetivo principal es pronosticar el futuro en estaciones conocidas, así
+# que la validación principal es cronológica. Como objetivo secundario queremos saber cómo generaliza el modelo
+# a estaciones que no participaron en su ajuste, y eso lo medimos con `GroupKFold` por estación. Ese escenario
+# corresponde a una estación nueva de la red que ya tiene su propio historial y vecinos con sensores, no a un
+# sitio sin mediciones, porque el modelo sigue usando la velocidad pasada de la estación y la de sus vecinos.
+# Como `GroupKFold` no garantiza que las estaciones de prueba estén lejos de las de entrenamiento, agregamos un
+# tercer esquema con bloques geográficos separados por una zona de amortiguación (sección 3.2). Reportamos los
+# tres esquemas por separado.
 #
-# **Interpretación.** El patrón espacial es estable entre temporadas (I de Moran 0.45 en la
-# seca y 0.40 en la lluviosa): el hotspot de La Guajira no se desplaza, solo se intensifica. El 82 % de
-# las estaciones tiene más viento en la temporada seca (mediana +0.38 m/s). Las anomalías diarias de
-# estaciones cercanas están correlacionadas (r ≈ 0.3–0.4 por debajo de 75 km), y la correlación decae con
-# la distancia hasta ≈ 0.1 a 300–400 km: los sistemas meteorológicos afectan a la vez a grupos de
-# estaciones vecinas. Habría riesgo de fuga por vecindad si en entrenamiento y prueba se mezclaran
-# estaciones vecinas en el mismo momento; con la partición por años completos ese riesgo no existe.
+# El patrón espacial es estable entre temporadas (I de Moran de 0.45 en la seca y de 0.40 en la lluviosa): el
+# hotspot de La Guajira no se desplaza, solo se intensifica. El 82 % de las estaciones tiene más viento en la
+# temporada seca (mediana de +0.38 m/s). Las anomalías diarias de estaciones cercanas están correlacionadas
+# (r ≈ 0.3–0.4 por debajo de 75 km) y la correlación decae con la distancia hasta ≈ 0.1 entre 300 y 400 km,
+# porque los sistemas meteorológicos afectan a la vez a grupos de estaciones vecinas. Mezclar en el
+# entrenamiento y en la prueba estaciones vecinas del mismo momento podría filtrar información; con la partición
+# por años completos ese riesgo no existe.
 
 # %% [markdown]
 # ## 2.9 Preprocesamiento
 #
-# Todo el preprocesamiento que se ajusta con datos (escalado, transformación del objetivo) va dentro
-# de un `Pipeline` que se ajusta solo con entrenamiento.
+# Todo lo que se ajusta con datos (el escalado y, si se usara, la transformación del objetivo) va dentro de un
+# `Pipeline` que se ajusta solo con el entrenamiento. La tabla relaciona cada decisión con el hallazgo del
+# análisis exploratorio que la motiva:
 #
 # | Decisión | Hallazgo del EDA que la motiva |
 # |---|---|
-# | Partición cronológica, prueba = 2025; validación expansiva por años | Dependencia temporal fuerte (2.6) |
+# | Partición cronológica (prueba = 2025) y validación cruzada con pliegues cronológicos | Dependencia temporal fuerte (2.6) |
 # | Validación adicional por estación (`GroupKFold`) | Autocorrelación espacial y estaciones nuevas cada año (2.7, 2.6.1) |
 # | Rezagos de velocidad (1, 2, 3, 6, 12, 23 h) y media de 24 h | ACF/PACF con picos en 1 h y 24 h (2.6.3) |
 # | Hora del objetivo en seno/coseno | Ciclo diario fuerte (2.1, 2.6.3) |
@@ -1450,25 +1446,26 @@ fig.tight_layout(); plt.show()
 # | Valores imposibles y sensores defectuosos → NaN o excluidos | Auditoría de calidad (1.6) |
 # | Sin codificación categórica | La categoría de la estación tiene categorías raras (2.2) y el departamento se asocia sobre todo con la ubicación, que ya entra por la altitud y el rezago espacial (2.3, 2.7) |
 # | Escalado estándar dentro del Pipeline | El SVR es sensible a la escala; las variables tienen unidades distintas |
-# | Transformación log(1 + y) del objetivo: se decide por validación cruzada | Asimetría positiva del objetivo (2.1) |
+# | Objetivo sin transformar (el logaritmo se probó en la validación cruzada y empeora el error) | Asimetría positiva del objetivo (2.1) |
+# | Limpieza causal para el modelado | La depuración del análisis exploratorio usa información de la estación-año completa (1.6) |
 
 # %% [markdown]
 # ---
 # # 3. Modelo base
 #
-# * **Variable objetivo:** `y = vel(t + 24 h)`, emitido en t + 1 h (sección 1.1).
-# * **Modelo:** SVR lineal (`LinearSVR`) dentro de un `Pipeline` con `StandardScaler`. Con la pérdida
-#   cuadrática insensible a ε y ε = 0, la pérdida es el error cuadrático con regularización L2: en la
-#   práctica se comporta como una regresión lineal regularizada. Por eso se compara también con `Ridge`.
-# * **Líneas base triviales:** `DummyRegressor` (media de train), persistencia de 24 h
-#   (`vel(t)`: la misma hora del día anterior al objetivo) y climatología estación × mes × hora.
-# * **Partición:** entrenamiento 2020–2024, prueba 2025 (definida en 2.0, antes de todo el EDA).
+# Como modelo base usamos un SVR lineal (`LinearSVR`) dentro de un `Pipeline` con `StandardScaler`, para
+# predecir `y = vel(t + 24 h)` con el pronóstico emitido en t + 1 h (sección 1.1). Con la pérdida cuadrática
+# insensible a ε y ε = 0, la función de pérdida se reduce al error cuadrático con regularización L2, de modo que
+# en la práctica se comporta como una regresión lineal regularizada; por eso lo comparamos también con `Ridge`.
+# Como referencias simples usamos un `DummyRegressor` (la media del entrenamiento), la persistencia de 24 h
+# (`vel(t)`, la misma hora del día anterior al objetivo) y la climatología de cada estación por mes y hora.
+# Entrenamos con 2020–2024 y evaluamos en 2025, según la partición definida en la sección 2.0.
 #
-# **Datos del modelado: limpieza sin información futura.** El EDA (secciones 1–2) usa la depuración
-# original, que mira la estación-año completa (1.6). Para que **ninguna etapa del modelado use
-# información futura**, toda la sección 3 usa un panel reprocesado desde los CSV originales con
-# `scripts/procesar_variable_causal.py` (`procesar_todo.py --causal`), en el que **cada lectura se limpia
-# solo con lo ocurrido antes de ella** o con metadatos estáticos del catálogo:
+# **Datos del modelado: limpieza sin información futura.** El análisis exploratorio usa la depuración de la
+# sección 1.6, que mira la estación-año completa. Para que ninguna etapa del modelado use información del
+# futuro, en esta sección trabajamos con un panel reprocesado desde los CSV originales con
+# `scripts/procesar_variable_causal.py` (`procesar_todo.py --causal`), en el que cada lectura se limpia solo
+# con lo ocurrido antes de ella o con metadatos estáticos del catálogo:
 #
 # | Regla retrospectiva (EDA, secciones 1–2) | Regla causal (modelado, sección 3) |
 # |---|---|
@@ -1480,17 +1477,16 @@ fig.tight_layout(); plt.show()
 # | Sensor con más horas en el año | Si hay varios sensores válidos en la hora, **se promedian** |
 # | Nombre y coordenadas de la última observación | De la **primera** observación |
 #
-# **Estaciones y sensores nuevos:** no se descartan por falta de historial. Mientras el sensor no tenga
-# al menos **100 lecturas en los 30 días anteriores**, no se lo puede marcar como defectuoso (solo se
-# aplica el rango fijo); con sensores de 10 minutos, 100 lecturas se alcanzan en menos de un día, así que
-# la regla puede empezar a actuar antes de cumplir un mes. Mientras tenga menos de 12 intervalos previos,
-# la frecuencia de muestreo se toma de su tipo de sensor, y sin 3 días previos de presión la referencia es
-# la presión esperada por la altitud.
+# Las estaciones y los sensores nuevos no se descartan por falta de historial. Mientras un sensor no reúne al
+# menos 100 lecturas en los 30 días anteriores no se lo puede marcar como defectuoso, y solo se le aplica el
+# rango fijo; con sensores de 10 minutos eso ocurre en menos de un día, así que la regla puede empezar a actuar
+# antes de cumplir un mes. Mientras tenga menos de 12 intervalos previos, la frecuencia de muestreo se toma de su
+# tipo de sensor, y sin 3 días previos de presión la referencia es la presión esperada para su altitud.
 #
-# Como la limpieza es causal en todos los años, cada pliegue de la validación cruzada (2021–2024) y la
-# prueba (2025) usan datos limpiados solo con su pasado. Las predictoras se construyen con la misma
-# función que en 2.0; la lista de vecinos usa las coordenadas de la primera observación. La sección 3.6
-# compara este procesamiento con el original.
+# Como la limpieza es causal en todos los años, tanto los pliegues de validación como la prueba usan datos
+# limpiados solo con su pasado. Las predictoras se construyen con la misma función de la sección 2.0, y la lista
+# de vecinos usa las coordenadas de la primera observación de cada estación. En la sección 3.6 comparamos este
+# procesamiento con el original.
 
 # %%
 def preparar_panel(ruta):
@@ -1521,17 +1517,16 @@ print(f"Conjunto de modelado causal: {len(D):,} filas | entrenamiento {len(TR):,
 # %% [markdown]
 # ## 3.1 Validación cruzada temporal en entrenamiento
 #
-# **Validación cruzada para elegir la configuración: 4 pliegues cronológicos dentro de 2024.** Los
-# umbrales de limpieza se fijaron viendo datos de hasta 2023 (sección 1.6), así que los datos de
-# validación deben ser posteriores. Cada trimestre de 2024 se valida entrenando con todo lo anterior
-# (2020–2023 y los trimestres previos de 2024): ventana creciente. El filtro por la fecha del objetivo
-# (el objetivo de entrenamiento siempre es anterior al inicio del trimestre) equivale a una separación
-# de 24 h, y el escalado se ajusta dentro del `Pipeline` en cada entrenamiento. La configuración elegida
-# es la de menor RMSE medio en los 4 trimestres.
+# Elegimos la configuración del modelo con cuatro pliegues cronológicos dentro de 2024. Como los umbrales de
+# limpieza se fijaron con datos de hasta 2023 (sección 1.6), los datos de validación tienen que ser posteriores.
+# Cada trimestre de 2024 se valida entrenando con todo lo anterior (2020–2023 y los trimestres previos de 2024),
+# es decir, con una ventana que crece. Filtrar por la fecha del objetivo (el objetivo de entrenamiento siempre es
+# anterior al inicio del trimestre) equivale a dejar una separación de 24 h, y el escalado se vuelve a ajustar
+# dentro del `Pipeline` en cada entrenamiento. Nos quedamos con la configuración de menor RMSE medio en los
+# cuatro trimestres.
 #
-# **Referencia de estabilidad:** también se muestran pliegues por años completos (validación en 2021,
-# 2022, 2023 y 2024). No se usan para elegir la configuración, porque los años 2021–2023 se vieron al
-# fijar algunos umbrales.
+# Como referencia de estabilidad mostramos también pliegues por años completos, con validación en 2021, 2022,
+# 2023 y 2024. No los usamos para elegir, porque los años 2021 a 2023 se conocían cuando fijamos algunos umbrales.
 
 # %%
 def svr(C=0.1, log=False):
@@ -1690,11 +1685,10 @@ fig.tight_layout(); plt.show()
 grupos
 
 # %% [markdown]
-# **Bloques geográficos con zona de separación.** Las estaciones se agrupan en 6 bloques contiguos
-# (k-means sobre las coordenadas proyectadas). Cada bloque se usa como prueba (año 2025) y se entrena
-# con 2020–2024, **excluyendo las estaciones del bloque y todas las que están a menos de 30 km de
-# cualquiera de ellas** (buffer). Como el rezago espacial podría incluir estaciones del bloque de
-# prueba, este esquema usa las predictoras sin rezago espacial (`F_MET`).
+# **Bloques geográficos con zona de separación.** Agrupamos las estaciones en 6 bloques contiguos (k-means sobre
+# las coordenadas proyectadas). Cada bloque se usa como prueba en 2025, entrenando con 2020–2024 sin las
+# estaciones del bloque ni las que están a menos de 30 km de alguna de ellas. Como el rezago espacial podría
+# incluir estaciones del bloque de prueba, en este esquema usamos las predictoras sin rezago espacial (`F_MET`).
 
 # %%
 BUFFER_KM = 30
@@ -1735,9 +1729,9 @@ por_tramo = pd.DataFrame({"y": y_te, "svr": pred_te, "pers": pers_te, "tramo": t
 por_tramo
 
 # %% [markdown]
-# **Población cubierta.** Exigir las cuatro variables deja fuera a las estaciones sin sensor de presión o
-# de temperatura. El modelo que solo usa velocidad puede evaluarse sobre una población mayor: todas las
-# filas con rezagos de velocidad completos.
+# **Población cubierta.** Exigir las cuatro variables deja fuera a las estaciones que no tienen sensor de
+# presión o de temperatura. El modelo que solo usa la velocidad se puede evaluar sobre una población más
+# amplia: todas las filas con los rezagos de velocidad completos.
 
 # %%
 D_vel = D_todo.dropna(subset=F_UNI + ["y"])
@@ -1803,8 +1797,8 @@ print(f"I de Moran del residuo medio por estación: {I_est:.3f} (p = {p_est:.3f}
 # %% [markdown]
 # ## 3.4 Curva de aprendizaje
 #
-# Se entrena con fracciones crecientes de 2020–2023 (las más recientes) y se evalúa en 2024, sin
-# tocar la prueba.
+# Entrenamos con fracciones crecientes de 2020–2023, empezando por los datos más recientes, y evaluamos siempre
+# en 2024, sin tocar la prueba.
 
 # %%
 base_lc, val_lc = TR[TR.t_y < "2024-01-01"], TR[TR.t >= "2024-01-01"]
@@ -1839,57 +1833,60 @@ plt.show()
 coef.to_frame("coeficiente").T
 
 # %% [markdown]
-# **Interpretación** (todos los resultados de esta sección usan la limpieza causal).
+# Todos los resultados de esta sección usan la limpieza causal.
 #
-# * **Validación cruzada:** la configuración elegida con los 4 trimestres de 2024 es la misma que se
-#   obtendría con los pliegues por años (referencia). C no cambia el resultado (con n ≈ 400 000 la regularización pesa poco) y el
-#   SVR da prácticamente lo mismo que `Ridge`, como se espera con esta pérdida. Transformar el objetivo
-#   con log(1 + y) empeora mucho el RMSE (en los trimestres de 2024, mejora media sobre la persistencia de −0.2 % frente a 12.8 %), porque
-#   al devolver la predicción a m/s con la exponencial se amplifican los errores; por eso se usa el
-#   objetivo sin transformar.
-# * **Desempeño en 2025:** el SVR completo obtiene R² = 0.737 (IC 95 %: 0.713–0.756) y RMSE = 0.733 m/s
-#   (0.710–0.758), frente a R² = 0.651 (0.614–0.679) de la persistencia: **mejora el RMSE de la
-#   persistencia en un 13.2 %** (IC 95 %: 12.2–14.4 %), de forma estable frente a la longitud de los
-#   bloques del bootstrap (3, 7 o 14 días). Supera a la persistencia en el 94 % de las estaciones. La
-#   climatología y el modelo de la media quedan muy por detrás.
-# * **Generalización espacial:** en estaciones que no se usaron para ajustar el modelo (`GroupKFold`), la
-#   mejora media es del 13 % (R² medio de los pliegues 0.65). Con **bloques geográficos y buffer de
-#   30 km** (sin rezago espacial), la mejora media es del 12 % y es positiva en los seis bloques (entre 6 %
-#   y 17 %). El promedio de los R² de los bloques (no un R² calculado con todas las predicciones juntas)
-#   es 0.57 y varía mucho entre bloques (0.30 a 0.73): la capacidad de generalizar a zonas nuevas depende
-#   de la región.
-# * **Aporte de cada grupo de variables:** casi todo el aporte viene de la velocidad pasada (+12.3 %). En
-#   la comparación pareada con bootstrap, la meteorología reduce el RMSE en 0.007 m/s (IC 95 %:
-#   0.006–0.008) y el rezago espacial en 0.001 m/s (0.001–0.002): diferencias **estadísticamente
-#   distinguibles de cero pero prácticamente despreciables**. Los coeficientes lo confirman: los mayores
-#   son la velocidad actual (0.43), la de hace 23 h (0.31) y la media de 24 h (0.27). En esencia, el modelo
-#   aprende que el viento de mañana a esta hora es una combinación del de hoy a esta hora y del nivel de
-#   hoy.
-# * **Por intensidad del viento:** no hay predicciones negativas. El SVR mejora a la persistencia en
-#   todos los tramos por debajo de 6 m/s, pero **con vientos fuertes (≥ 6 m/s, 2 % de las horas) es peor
-#   que la persistencia (RMSE 1.75 frente a 1.59 m/s) y los subestima en 1.3 m/s de media**: el modelo
-#   lineal "tira hacia la media". Es una limitación relevante para aplicaciones eólicas.
-# * **Población cubierta:** el modelo de solo velocidad, evaluado sobre todas las filas con velocidad
-#   (310 027 filas y 65 estaciones en 2025, frente a 213 972 y 53 con las 4 variables), obtiene resultados
-#   agregados similares (R² = 0.74, mejora del 12 %). Esto no demuestra por sí solo que la restricción a
-#   casos completos no introduzca ningún sesgo en subgrupos concretos.
-# * **Residuos:** tienen asimetría positiva y colas pesadas (curtosis 4.0), heterocedasticidad
-#   (Breusch-Pagan, p ≈ 0: el error crece con la velocidad predicha), fuerte autocorrelación en el rezago
-#   de 1 h (0.65) y autocorrelación espacial (I de Moran de 0.29 para el residuo medio por estación;
-#   significativa en el 55 % de los días). Los residuos conservan estructura temporal y espacial que el
-#   modelo lineal no captura.
-# * **Curva de aprendizaje:** el error de validación deja de bajar a partir de unas 95 000 filas y el
-#   error de entrenamiento no disminuye. Esto **sugiere** sesgo alto (el modelo lineal no captura toda la
-#   estructura) más que falta de datos. No lo demuestra: al ampliar la ventana cambian a la vez la
-#   cantidad de datos, los años y las estaciones incluidas.
+# La configuración elegida con los cuatro trimestres de 2024 es la misma que se obtendría con los pliegues por
+# años. El parámetro C no cambia el resultado, porque con unas 400 000 filas la regularización pesa muy poco, y el
+# SVR da prácticamente lo mismo que `Ridge`, como cabe esperar con esta pérdida. Transformar el objetivo con
+# log(1 + y) empeora mucho el error: en los trimestres de 2024 la mejora media sobre la persistencia es de
+# −0.2 %, frente a 12.8 % sin transformar, porque al volver a m/s con la exponencial los errores se amplifican.
+# Por eso usamos el objetivo en su escala original.
+#
+# En la prueba de 2025, el SVR completo obtiene R² = 0.737 (IC 95 %: 0.713–0.756) y RMSE = 0.733 m/s
+# (0.710–0.758), frente a R² = 0.651 (0.614–0.679) de la persistencia. Es decir, reduce el error de la
+# persistencia en un 13.2 % (IC 95 %: 12.2–14.4 %), y ese resultado se mantiene con bloques de 3, 7 o 14 días en
+# el bootstrap. Mejora a la persistencia en el 94 % de las estaciones, y la climatología y el modelo de la media
+# quedan muy por detrás.
+#
+# En estaciones que no participaron en el ajuste (`GroupKFold`) la mejora media es del 13 %, con un R² medio de
+# 0.65 entre pliegues. Con bloques geográficos separados por 30 km, y sin rezago espacial, la mejora media es del
+# 12 % y es positiva en los seis bloques, entre el 6 % y el 17 %. El promedio de los R² de los bloques, que no es
+# un R² calculado con todas las predicciones juntas, es de 0.57 y varía mucho de una región a otra (entre 0.30 y
+# 0.73).
+#
+# Casi toda la mejora viene de la historia de la velocidad (+12.3 %). En la comparación pareada con bootstrap, las
+# variables meteorológicas reducen el RMSE en 0.007 m/s (IC 95 %: 0.006–0.008) y el rezago espacial en 0.001 m/s
+# (0.001–0.002): diferencias que se distinguen de cero pero que en la práctica son despreciables. Los coeficientes
+# cuentan lo mismo: los mayores son la velocidad actual (0.43), la de hace 23 h (0.31) y la media de las últimas
+# 24 h (0.27). En esencia, el modelo estima el viento de mañana a esta hora combinando el de hoy a la misma hora
+# con el nivel general del día.
+#
+# No hay predicciones negativas. El SVR mejora a la persistencia en todos los tramos por debajo de 6 m/s, pero con
+# vientos fuertes (≥ 6 m/s, el 2 % de las horas) es peor que ella (RMSE de 1.75 frente a 1.59 m/s) y los subestima
+# en 1.3 m/s de media: el modelo lineal tiende hacia la media. Es una limitación importante para aplicaciones
+# eólicas.
+#
+# Al evaluar el modelo de solo velocidad sobre todas las filas con velocidad (310 027 filas y 65 estaciones en
+# 2025, frente a 213 972 y 53 con las cuatro variables) se obtienen resultados agregados similares (R² = 0.74 y
+# una mejora del 12 %), aunque eso no descarta diferencias en subgrupos concretos.
+#
+# Los residuos tienen asimetría positiva y colas pesadas (curtosis de 4.0), son heterocedásticos (Breusch-Pagan,
+# p ≈ 0: el error crece con la velocidad predicha), están fuertemente autocorrelacionados de una hora a la
+# siguiente (0.65) y también en el espacio (I de Moran de 0.29 para el residuo medio por estación, significativo
+# en el 55 % de los días). Queda estructura temporal y espacial que el modelo lineal no captura.
+#
+# En la curva de aprendizaje, el error de validación deja de bajar a partir de unas 95 000 filas y el de
+# entrenamiento no disminuye, lo que sugiere un sesgo alto, es decir, un modelo demasiado simple más que falta de
+# datos. Hay que tomarlo con cautela, porque al ampliar la ventana cambian a la vez la cantidad de datos, los años
+# y las estaciones incluidas.
 
 # %% [markdown]
 # ## 3.6 Comparación con el procesamiento original y con el criterio alternativo de temperatura
 #
-# **Procesamiento original.** Se ajusta el mismo modelo (misma configuración) con el panel de la
-# depuración original y se compara con el principal. Primero cada evaluación con su propia población
-# de prueba; después solo sobre las **observaciones comunes** (misma estación y hora, mismo valor
-# objetivo), para separar un cambio de desempeño de un cambio en la población evaluada.
+# Ajustamos el mismo modelo, con la misma configuración, sobre el panel de la depuración original y lo
+# comparamos con el principal. Primero mostramos cada evaluación con su propia población de prueba, y después
+# solo las observaciones comunes (misma estación, hora y valor objetivo), para distinguir un cambio de desempeño
+# de un cambio en la población evaluada.
 
 # %%
 pred_o = svr(C_OPT, LOG_OPT).fit(TR_o[F_ESP], TR_o.y).predict(TE_o[F_ESP])
@@ -1921,10 +1918,10 @@ def comparar_comunes(TE_a, pred_a, TE_b, pred_b, nombre_a, nombre_b):
 comparar_comunes(TE_o, pred_o, TE, pred_te, "original", "causal")
 
 # %% [markdown]
-# **Criterio alternativo de temperatura.** El modelado usa el criterio general de sensor defectuoso,
-# fijado antes de ver 2025 (cualquier lectura fuera de [3, 45] °C). Como sensibilidad, se reprocesó la
-# temperatura con el criterio de la depuración original, adoptado después de ver 2025 (contar solo
-# lecturas > 45 °C), y se repitió el ajuste y la prueba.
+# **Criterio alternativo de temperatura.** El modelado usa el criterio general de sensor defectuoso, fijado antes
+# de conocer 2025 (cualquier lectura fuera de [3, 45] °C). Como prueba de sensibilidad reprocesamos la
+# temperatura con el criterio de la depuración original, que se adoptó después de ver 2025 (contar solo las
+# lecturas por encima de 45 °C), y repetimos el ajuste y la prueba.
 
 # %%
 _, _, D_alt = preparar_panel(DATOS / "panel_multivariado_causal_temp_alt.csv")
@@ -1941,74 +1938,65 @@ display(pd.DataFrame({
 comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "criterio principal")
 
 # %% [markdown]
-# **Interpretación.**
+# La limpieza causal evalúa 213 972 filas en 53 estaciones, frente a 210 859 en 51 con la original, porque ya no
+# excluye estación-años completos, enmascara los tramos pegados solo desde que cumplen su plazo y promedia los
+# sensores. Las métricas agregadas son casi iguales (R² de 0.737 frente a 0.739, con la misma mejora del 13.2 %).
+# Sobre las 180 779 observaciones comunes con el mismo valor objetivo, la diferencia de RMSE es de −0.0002 m/s
+# (IC 95 %: −0.0003 a −0.0001): distinguible de cero, pero de un tamaño despreciable. No encontramos, por tanto,
+# una diferencia apreciable entre los dos procesamientos, y la pequeña diferencia en el R² agregado se explica por
+# el cambio en la población evaluada. Con el criterio de temperatura adoptado después de ver 2025 las métricas son
+# prácticamente idénticas (diferencia de RMSE de 0.0002 m/s sobre las mismas 213 972 filas), de modo que esa
+# decisión no influye en los resultados que reportamos.
 #
-# * **Procesamiento original frente al causal:** la limpieza causal evalúa 213 972 filas en 53
-#   estaciones, frente a 210 859 en 51 con la original, porque ya no se excluyen estación-años completos,
-#   los tramos pegados solo se enmascaran desde que cumplen su plazo y los sensores se promedian. Las
-#   métricas agregadas son casi iguales (R² 0.737 frente a 0.739; la misma mejora del 13.2 %). Sobre las
-#   180 779 observaciones comunes con el mismo valor objetivo, la diferencia de RMSE es de −0.0002 m/s
-#   (IC 95 %: −0.0003 a −0.0001): estadísticamente distinguible de cero, pero de tamaño despreciable. **No
-#   se encontró una diferencia apreciable** entre los dos procesamientos en esta comparación; la pequeña
-#   diferencia de R² agregado se debe al cambio en la población evaluada.
-# * **Criterio de temperatura:** con el criterio adoptado después de ver 2025, las métricas son
-#   prácticamente idénticas (diferencia de RMSE de 0.0002 m/s sobre las mismas 213 972 filas). Por eso el
-#   modelado usa el criterio fijado antes de ver 2025, y la decisión tomada mirando el periodo de prueba no
-#   influye en los resultados reportados.
+# ## 3.7 ¿Qué tan creíble es el resultado?
 #
-# ## 3.7 Nota crítica
+# Un R² demasiado alto en un pronóstico de este tipo haría sospechar de algún error, así que revisamos el nuestro
+# (0.737 en la prueba) desde varios ángulos:
 #
-# El R² en prueba sin información futura (0.737, sección 3.2) queda por debajo de la zona de alerta del
-# 80–90 %. Aun así, se verificó lo que pide la nota:
+# 1. **Fuga de datos.** Ninguna predictora usa información posterior a la hora t, la última completa al emitir el
+#    pronóstico (sección 2.5), y una fuga construida a propósito produce un resultado muy distinto (R² = 0.85 con
+#    una sola variable). La depuración del análisis exploratorio sí usaba información del año completo (1.6); por
+#    eso repetimos todo el modelado con una limpieza causal, en la que cada lectura se limpia solo con su pasado,
+#    y con umbrales fijados antes de conocer 2025. Sobre las mismas observaciones no encontramos una diferencia
+#    apreciable con el procesamiento original (3.6).
+# 2. **Comparación con una referencia simple.** La persistencia ya logra R² = 0.65. Lo que aporta el modelo es la
+#    reducción del 13 % en el error (IC 95 %: 12–14 %), no el valor absoluto del R².
+# 3. **Estructura temporal y espacial.** La partición respeta el orden del tiempo, y la generalización se mide con
+#    `GroupKFold` por estación y con bloques geográficos separados.
+# 4. **R² global frente a R² por estación.** Parte del R² global se debe a las diferencias fijas entre estaciones.
+#    El R² mediano por estación, entre 0.32 y 0.34, es la medida más fiel de lo que el modelo realmente pronostica,
+#    y deja un margen claro para mejorar.
 #
-# 1. **Fuga de datos:** ninguna predictora usa información posterior a la hora t, la última completa
-#    al emitir el pronóstico (2.5). Una fuga deliberada da un síntoma muy distinto (R² = 0.85 con una
-#    sola variable). La depuración original sí usaba información del año completo (1.6); por eso todo el
-#    modelado se repitió con una **limpieza causal** en la que cada lectura se limpia solo con su pasado
-#    (sección 3). Ningún umbral del modelado se fijó viendo 2025 (1.6). Sobre las mismas observaciones,
-#    no se encontró una diferencia apreciable con el procesamiento original (3.6).
-# 2. **Comparación con la línea base trivial:** la persistencia ya logra R² = 0.65; el aporte real del
-#    modelo es la mejora del 13 % en RMSE (IC 95 %: 12–14 %), no el R² absoluto.
-# 3. **Estructura temporal y espacial:** la partición es por años completos, y la generalización se
-#    mide con `GroupKFold` por estación y con bloques geográficos con zona de separación.
-# 4. **R² global vs. R² por estación:** parte del R² global se debe a las diferencias fijas entre
-#    estaciones. El R² mediano por estación es 0.32–0.34, que es la medida más honesta de lo que el modelo
-#    pronostica. El problema **no es trivial** para el curso y deja un margen claro para mejorar.
-#
-# Un R² por debajo de 0.80 **no demuestra por sí solo** que no haya fuga; la evidencia contra la fuga
-# son las comprobaciones de los puntos 1 y 3.
+# Un R² moderado no basta por sí mismo para descartar una fuga; lo que la descarta son las comprobaciones de los
+# puntos 1 y 3.
 #
 # ---
 # # 4. Conclusiones y limitaciones
 #
-# 1. A partir de 30 millones de lecturas crudas del IDEAM se construyó un panel horario de 1.3 millones
-#    de estación-horas en 76 estaciones del Caribe colombiano (2020–2025), de las cuales **961 860 tienen
-#    las 4 variables** (63 estaciones). La auditoría de calidad está documentada y la presión es coherente
-#    con la altitud del catálogo.
-# 2. El EDA muestra que el viento tiene **ciclos diario y anual fuertes**, un **gradiente espacial**
-#    marcado (hotspot en La Guajira) y **dependencia temporal y espacial**, lo que obliga a validar por
-#    años completos y por estación.
-# 3. Con una limpieza **sin información futura** (sección 3), el **SVR lineal** pronostica la velocidad
-#    a 24 h con R² = 0.737 (IC 95 %: 0.71–0.76) y mejora a la persistencia en un 13.2 % (IC 95 %:
-#    12–14 %). No se encontró una diferencia apreciable con el procesamiento original, y la mejora se
-#    mantiene en estaciones que no se usaron para ajustarlo y en bloques geográficos con separación. Las variables meteorológicas aportan poco a un
+# 1. A partir de 30 millones de lecturas crudas del IDEAM construimos un panel horario de 1.3 millones de
+#    estación-horas en 76 estaciones del Caribe colombiano (2020–2025), de las cuales 961 860 tienen las cuatro
+#    variables (63 estaciones). Documentamos la auditoría de calidad y comprobamos que la presión es coherente con
+#    la altitud del catálogo.
+# 2. El viento de la región tiene ciclos diario y anual fuertes, un gradiente espacial marcado, con un hotspot en
+#    La Guajira, y una dependencia temporal y espacial que obliga a validar por periodos y por estación.
+# 3. Con una limpieza que no usa información futura, el SVR lineal pronostica la velocidad a 24 h con R² = 0.737
+#    (IC 95 %: 0.71–0.76) y reduce el error de la persistencia en un 13.2 % (IC 95 %: 12–14 %). No encontramos
+#    diferencias apreciables con el procesamiento original, y la mejora se mantiene en estaciones que no
+#    participaron en el ajuste y en bloques geográficos separados. Las variables meteorológicas aportan poco a un
 #    modelo lineal, aunque su información mutua con el objetivo sugiere relaciones no lineales.
-# 4. Los residuos conservan estructura temporal, espacial y heterocedástica, y la curva de aprendizaje
-#    indica sesgo alto. El proyecto final debe probar **modelos no lineales** (árboles, boosting, redes)
-#    que aprovechen interacciones como dirección × hora (brisa marina).
+# 4. Los residuos conservan estructura temporal, espacial y heterocedástica, y la curva de aprendizaje apunta a un
+#    sesgo alto. El paso siguiente es probar modelos no lineales (árboles, boosting, redes) capaces de aprovechar
+#    interacciones como la de la dirección con la hora del día en la brisa marina.
 #
-# **Limitaciones:** (i) los datos son crudos y no están validados por el IDEAM; (ii) la red cambia de
-# un año a otro y está sesgada hacia las tierras bajas; (iii) el análisis usa casos completos, así que
-# excluye las estaciones sin sensor de presión o de temperatura; (iv) el R² global depende del conjunto
-# de estaciones de cada año, por lo que siempre se reporta junto con el R² por estación y la mejora
-# sobre la persistencia; (v) el EDA usa la depuración original, que es retrospectiva y en temperatura
-# incluye un criterio fijado después de ver 2025; todo el modelado (sección 3) usa la limpieza causal, con
-# umbrales fijados antes de ver 2025; como algunos se fijaron con datos de 2020–2023, los
-# hiperparámetros se eligen con validación cruzada de 4 trimestres de 2024, y los pliegues por años
-# 2021–2023 son solo referencia;
-# (vi) la hora local es un supuesto
-# respaldado por el ciclo diario, no documentado por la fuente; (vii) la anticipación real desde la emisión es de 23 h hasta el inicio de la hora
-# objetivo.
+# **Limitaciones.** Los datos son crudos y no están validados por el IDEAM. La red cambia de un año a otro y está
+# sesgada hacia las tierras bajas. Trabajamos con casos completos, así que quedan fuera las estaciones sin sensor
+# de presión o de temperatura. El R² global depende del conjunto de estaciones de cada año, por lo que siempre lo
+# acompañamos del R² por estación y de la mejora sobre la persistencia. El análisis exploratorio usa una
+# depuración retrospectiva que, en temperatura, incluye un criterio fijado después de ver 2025; el modelado usa la
+# limpieza causal con umbrales fijados antes, y como algunos de ellos se eligieron con datos de 2020–2023, la
+# configuración del modelo se elige con validación en 2024. La hora local es un supuesto que respalda el ciclo
+# diario, pero la fuente no la documenta. Por último, la anticipación real desde que se emite el pronóstico es de
+# 23 h hasta el inicio de la hora objetivo.
 
 # %%
 import sklearn, scipy, statsmodels, matplotlib
