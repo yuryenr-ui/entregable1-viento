@@ -13,7 +13,7 @@ modelo que comparamos con referencias simples.
 - **Pregunta:** cuál será la velocidad media del viento en la hora que empieza 24 horas después de la
   última hora observada.
 - **Modelo base:** un SVR lineal, comparado con la persistencia, la climatología y un modelo de media.
-  Reduce el error de la persistencia en un 13 % (R² = 0.74 en 2025).
+  Reduce el error de la persistencia en un `13 %` (`R² = 0.74` en 2025).
 
 ## Reproducibilidad
 
