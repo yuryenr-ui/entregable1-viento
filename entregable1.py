@@ -55,7 +55,7 @@ from sklearn.decomposition import PCA
 from sklearn.dummy import DummyRegressor
 from sklearn.ensemble import IsolationForest
 from sklearn.feature_selection import mutual_info_regression
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import LinearRegression
 from sklearn.metrics import (mean_absolute_error, mean_absolute_percentage_error, mean_squared_error,
                              r2_score, silhouette_score)
 from sklearn.model_selection import GroupKFold
@@ -1454,7 +1454,8 @@ fig.tight_layout(); plt.show()
 # Como modelo base usamos un SVR lineal (`LinearSVR`) dentro de un `Pipeline` con `StandardScaler`, para
 # predecir `y = vel(t + 24 h)` con el pronóstico emitido en `t + 1 h` (sección 1.1). Con la pérdida cuadrática
 # insensible a `ε` y `ε = 0`, la función de pérdida se reduce al error cuadrático con regularización L2, de modo que
-# en la práctica se comporta como una regresión lineal regularizada; por eso lo comparamos también con `Ridge`.
+# en la práctica se comporta como una regresión lineal regularizada, lo que además conviene por la fuerte
+# colinealidad entre los rezagos (sección 2.3).
 # Como referencias simples usamos un `DummyRegressor` (la media del entrenamiento), la persistencia de 24 h
 # (`vel(t)`, la misma hora del día anterior al objetivo) y la climatología de cada estación por mes y hora.
 # Entrenamos con 2020–2024 y evaluamos en 2025, según la partición definida en la sección 2.0.
@@ -1613,8 +1614,6 @@ final = {}
 for nombre, F in [("SVR solo velocidad", F_UNI), ("SVR + meteorología", F_MET), ("SVR + meteorología + espacial", F_ESP)]:
     final[nombre] = svr(C_OPT, LOG_OPT).fit(TR[F], TR.y)
     modelos[nombre] = final[nombre].predict(TE[F])
-modelos["Ridge (mismas predictoras)"] = Pipeline([("escalado", StandardScaler()), ("ridge", Ridge(alpha=1.0))]).fit(
-    TR[F_ESP], TR.y).predict(TE[F_ESP])
 resultados = pd.DataFrame({k: metricas(y_te, v, pers_te, TE.est.to_numpy()) for k, v in modelos.items()}).T
 resultados
 
@@ -1649,7 +1648,7 @@ def diferencia_pareada(y, p_a, p_b, t, B=1000, bloque=7, rng=np.random.default_r
 
 
 pares = [("SVR + meteorología + espacial", "SVR solo velocidad"), ("SVR + meteorología + espacial", "SVR + meteorología"),
-         ("SVR + meteorología", "SVR solo velocidad"), ("SVR + meteorología + espacial", "Ridge (mismas predictoras)")]
+         ("SVR + meteorología", "SVR solo velocidad")]
 tabla_pares = pd.DataFrame([dict(zip(["comparación", "ΔRMSE (m/s)", "IC 2.5 %", "IC 97.5 %"],
                                      [f"{a} − {b}", *diferencia_pareada(y_te, modelos[a], modelos[b], TE.t)]))
                             for a, b in pares]).set_index("comparación")
@@ -1834,8 +1833,8 @@ coef.to_frame("coeficiente").T
 # Todos los resultados de esta sección usan la limpieza causal.
 #
 # La configuración elegida con los cuatro trimestres de 2024 es la misma que se obtendría con los pliegues por
-# años. El parámetro `C` no cambia el resultado, porque con unas 400 000 filas la regularización pesa muy poco, y el
-# SVR da prácticamente lo mismo que `Ridge`, como cabe esperar con esta pérdida. Transformar el objetivo con
+# años. El parámetro `C` no cambia el resultado, porque con unas 400 000 filas la regularización pesa muy poco.
+# Transformar el objetivo con
 # log(1 + y) empeora mucho el error: en los trimestres de 2024 la mejora media sobre la persistencia es de
 # `−0.2 %`, frente a `12.8 %` sin transformar, porque al volver a m/s con la exponencial los errores se amplifican.
 # Por eso usamos el objetivo en su escala original.
