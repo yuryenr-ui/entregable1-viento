@@ -9,5 +9,6 @@ project:
   toc:
     - file: index.md
     - file: entregable1.ipynb
+    - file: dashboard.md
 site:
   template: book-theme

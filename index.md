@@ -14,6 +14,8 @@ modelo que comparamos con referencias simples.
   última hora observada.
 - **Modelo base:** un SVR lineal, comparado con la persistencia, la climatología y un modelo de media.
   Reduce el error de la persistencia en un `13 %` (`R² = 0.74` en 2025).
+- **Dashboard interactivo:** https://viento-caribe-dashboard.onrender.com (descrito en la última página
+  de este libro).
 
 ## Reproducibilidad
 
