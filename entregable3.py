@@ -11,7 +11,7 @@
 # Optuna y algoritmo genético con DEAP), con validación cruzada anidada respetando el orden temporal. Además
 # medimos el costo computacional de cada modelo, revisamos los residuos, interpretamos el mejor modelo con SHAP y
 # LIME y comparamos los pronósticos con pruebas estadísticas para pronósticos (MCS, Giacomini-White,
-# Clark-West y Diebold-Mariano).
+# Clark-West, Diebold-Mariano y SPA).
 #
 # **Reproducibilidad.** Usamos el mismo conjunto de modelado causal de la sección 3 (26 predictoras de la sección
 # 2.0, objetivo `y = vel(t + 24 h)`). Los experimentos están en la carpeta `e3/` (módulos con docstrings:
@@ -823,6 +823,25 @@ plt.show()
 # todos difieren de la persistencia y del árbol.
 
 # %% [markdown]
+# ### Reality Check y SPA: control del *data snooping*
+
+# %%
+# H0: ningún modelo alternativo tiene menor pérdida esperada que la referencia, teniendo en cuenta que se probaron varios
+spa = pd.DataFrame({
+    "Persistencia (24 h)": ev.spa(L["Persistencia (24 h)"], L[list(orden_modelos)]),
+    MEJOR: ev.spa(L[MEJOR], L[[m for m in orden_modelos if m != MEJOR]])}).T
+spa.index.name = "referencia"
+spa.round(4)
+
+# %% [markdown]
+# Las comparaciones anteriores miran pares de modelos. El Reality Check de White y el SPA de Hansen responden otra
+# pregunta: si, de todo el conjunto de modelos probados, alguno supera de verdad a una referencia o si la ventaja del
+# mejor se explica por haber probado muchos. Con bootstrap estacionario de bloques de 7 días sobre las pérdidas diarias
+# de 2025, todos los modelos superan a la persistencia (`p = 0`), pero ninguno supera de forma genuina a XGBoost: el SPA
+# no rechaza (`p = 0.25`), ni tampoco el Reality Check (`p = 0.42`). La ventaja de Random Forest en 2025 es compatible
+# con el azar de haber elegido el mejor entre siete modelos.
+
+# %% [markdown]
 # ## 5.8 Tabla maestra
 
 # %%
@@ -864,8 +883,9 @@ maestra.round(4)
 #    el SVR con núcleo RBF y parada temprana.
 # 4. El bucle externo eligió XGBoost con búsqueda aleatoria (`RMSE = 0.7268` en 2025); Random Forest fue el mejor en
 #    2025 (`0.7227`) y el único en el MCS al `10 %`, pero la diferencia entre ambos no es significativa según
-#    Diebold-Mariano y su tamaño de efecto es despreciable. Los dos mejoran al SVR lineal del capítulo anterior
-#    (`0.733`) y reducen el error de la persistencia en un `14 %`.
+#    Diebold-Mariano, el SPA no encuentra ningún modelo que supere a XGBoost y el tamaño de efecto es
+#    despreciable. Los dos mejoran al SVR lineal del capítulo anterior (`0.733`) y reducen el error de la
+#    persistencia en un `14 %`.
 # 5. El modelo no sobreajusta (errores de entrenamiento y prueba iguales, curva de aprendizaje convergida, prueba
 #    de permutación con `p = 0.02`). Pero sus residuos son heterocedásticos y conservan dependencia temporal, y
 #    SHAP muestra que casi toda la información viene de la velocidad reciente. Para el modelo final, lo que puede

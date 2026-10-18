@@ -163,6 +163,33 @@ def mcs(perdidas, alfa=0.10, bloque=7, reps=2000, semilla=SEED):
     return out.sort_values("pérdida media")
 
 
+def spa(perdida_referencia, perdidas, bloque=7, reps=2000, semilla=SEED):
+    """Reality Check (White, 2000) y SPA (Hansen, 2005) con bootstrap estacionario.
+
+    H0: ningún modelo de ``perdidas`` tiene menor pérdida esperada que la referencia. Controla el *data
+    snooping*: el p-valor tiene en cuenta que se probaron varios modelos y se mira el mejor.
+
+    Parameters
+    ----------
+    perdida_referencia : array-like
+        Pérdida diaria del modelo de referencia (benchmark).
+    perdidas : pandas.DataFrame
+        Pérdida diaria (filas) de los modelos alternativos (columnas), mismos días.
+
+    Returns
+    -------
+    dict con los p-valores del SPA consistente de Hansen, su cota inferior y la cota superior, que
+    corresponde al Reality Check de White.
+    """
+    from arch.bootstrap import SPA
+    s = SPA(np.asarray(perdida_referencia), np.asarray(perdidas), block_size=bloque, reps=reps,
+            bootstrap="stationary", seed=semilla)
+    s.compute()
+    p = s.pvalues
+    return {"p_SPA (Hansen)": float(p["consistent"]), "p_SPA inferior": float(p["lower"]),
+            "p_Reality Check (White)": float(p["upper"])}
+
+
 def ic_bootstrap_estacionario(d, bloque=7, reps=2000, semilla=SEED):
     """IC 95 % de la media de una serie diaria con bootstrap estacionario (Politis y Romano, 1994)."""
     from arch.bootstrap import StationaryBootstrap
