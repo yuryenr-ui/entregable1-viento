@@ -1968,7 +1968,7 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 #    participaron en el ajuste y en bloques geográficos separados. Las variables meteorológicas aportan poco a un
 #    modelo lineal, aunque su información mutua con el objetivo sugiere relaciones no lineales.
 # 4. Los residuos conservan estructura temporal, espacial y heterocedástica, y la curva de aprendizaje apunta a un
-#    sesgo alto. El paso siguiente es probar modelos no lineales (árboles, boosting, redes) capaces de aprovechar
+#    sesgo alto. El paso siguiente es probar modelos no lineales (árboles y boosting) capaces de aprovechar
 #    interacciones como la de la dirección con la hora del día en la brisa marina.
 #
 # **Limitaciones.** Los datos son crudos y no están validados por el IDEAM. La red cambia de un año a otro y está
