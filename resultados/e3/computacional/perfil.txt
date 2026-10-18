@@ -1,0 +1,43 @@
+===== KNN =====
+         20368 function calls (20284 primitive calls) in 11.592 seconds
+
+   Ordered by: cumulative time
+   List reduced from 522 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.000    0.000   11.138    3.713 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\pipeline.py:746(predict)
+        3    0.005    0.002   11.134    3.711 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\neighbors\_regression.py:229(predict)
+        3    0.000    0.000   11.128    3.709 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\neighbors\_base.py:756(kneighbors)
+        3    0.000    0.000   11.120    3.707 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\utils\parallel.py:54(__call__)
+        3    0.000    0.000   11.120    3.707 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\joblib\parallel.py:1969(__call__)
+       18    0.000    0.000   11.120    0.618 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\joblib\parallel.py:1670(_get_outputs)
+       11    0.016    0.001   11.110    1.010 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\joblib\parallel.py:1776(_retrieve)
+     1078   11.088    0.010   11.088    0.010 {built-in method time.sleep}
+      9/3    0.000    0.000    0.451    0.150 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\base.py:1381(wrapper)
+        3    0.000    0.000    0.450    0.150 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\pipeline.py:578(fit)
+        3    0.000    0.000    0.410    0.137 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\neighbors\_regression.py:205(fit)
+        3    0.400    0.133    0.410    0.137 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\neighbors\_base.py:467(_fit)
+
+
+
+===== Random Forest =====
+         661562 function calls (650639 primitive calls) in 18.775 seconds
+
+   Ordered by: cumulative time
+   List reduced from 429 to 12 due to restriction <12>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        3    0.000    0.000   18.628    6.209 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\base.py:1381(wrapper)
+        3    0.000    0.000   18.626    6.209 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\ensemble\_forest.py:302(fit)
+        6    0.000    0.000   18.502    3.084 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\utils\parallel.py:54(__call__)
+        6    0.001    0.000   18.502    3.084 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\joblib\parallel.py:1969(__call__)
+      912    0.001    0.000   18.501    0.020 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\joblib\parallel.py:1670(_get_outputs)
+      803    0.030    0.000   18.475    0.023 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\joblib\parallel.py:1776(_retrieve)
+     1787   18.435    0.010   18.435    0.010 {built-in method time.sleep}
+        3    0.000    0.000    0.259    0.086 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\ensemble\_forest.py:457(<listcomp>)
+      450    0.002    0.000    0.259    0.001 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\ensemble\_base.py:141(_make_estimator)
+     2253    0.012    0.000    0.218    0.000 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\base.py:248(get_params)
+     2253    0.011    0.000    0.203    0.000 C:\Users\USER\miniconda3\envs\ml_env\Lib\site-packages\sklearn\base.py:218(_get_param_names)
+     2253    0.001    0.000    0.160    0.000 C:\Users\USER\miniconda3\envs\ml_env\Lib\inspect.py:3261(signature)
+
+

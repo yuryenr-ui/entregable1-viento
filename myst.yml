@@ -10,5 +10,6 @@ project:
     - file: index.md
     - file: entregable1.ipynb
     - file: dashboard.md
+    - file: entregable3.ipynb
 site:
   template: book-theme

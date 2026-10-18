@@ -1,0 +1,9 @@
+experimento,configuracion,segundos
+Random Forest n_jobs,1,79.95599500000026
+Random Forest n_jobs,2,40.333974449999914
+Random Forest n_jobs,4,22.145853499999248
+Random Forest n_jobs,8,12.429260650000288
+Random Forest n_jobs,16,9.183187100000396
+6 ajustes de árbol,en serie,4.877739399998973
+6 ajustes de árbol,joblib loky,3.9308242999995855
+6 ajustes de árbol,joblib threading,1.074417200001335

@@ -6,3 +6,11 @@ __pycache__/
 # los datos procesados pesan cientos de MB: se regeneran con scripts/procesar_todo.py
 *.csv
 !resultados/umbral_velocidad.csv
+# entregable 3: se versionan los resultados de las búsquedas (JSON, predicciones y tablas), no el conjunto de
+# modelado (se regenera con scripts/e3_preparar_datos.py) ni la corrida de prueba ni los registros
+!resultados/e3/**/*.csv
+!resultados/e3/*.csv
+resultados/e3/modelado.parquet
+resultados/e3/corridas_prueba/
+resultados/e3/tabla_maestra_prueba.csv
+resultados/e3/*.log

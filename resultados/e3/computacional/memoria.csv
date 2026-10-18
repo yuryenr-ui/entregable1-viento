@@ -1,0 +1,8 @@
+modelo,memoria_MB
+KNN,69.34765625
+Ridge,48.87890625
+Lasso,49.02734375
+Árbol de decisión,18.47265625
+Random Forest,66.90625
+XGBoost,198.08984375
+SVR,143.73046875
