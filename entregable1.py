@@ -1947,25 +1947,12 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 #
 # ## 3.7 Robustez y alcance de los resultados
 #
-# Un `R²` demasiado alto en un pronóstico de este tipo haría sospechar de algún error, así que revisamos el nuestro
-# (`0.737` en la prueba) desde varios ángulos:
-#
-# 1. **Fuga de datos.** Ninguna predictora usa información posterior a la hora `t`, la última completa al emitir el
-#    pronóstico (sección 2.5), y una fuga construida a propósito produce un resultado muy distinto (`R² = 0.85` con
-#    una sola variable). La depuración del análisis exploratorio sí usaba información del año completo (1.6); por
-#    eso repetimos todo el modelado con una limpieza causal, en la que cada lectura se limpia solo con su pasado,
-#    y con umbrales fijados antes de conocer 2025. Sobre las mismas observaciones no encontramos una diferencia
-#    apreciable con el procesamiento original (3.6).
-# 2. **Comparación con una referencia simple.** La persistencia ya logra `R² = 0.65`. Lo que aporta el modelo es la
-#    reducción del `13 %` en el error (`IC 95 %: 12–14 %`), no el valor absoluto del `R²`.
-# 3. **Estructura temporal y espacial.** La partición respeta el orden del tiempo, y la generalización se mide con
-#    `GroupKFold` por estación y con bloques geográficos separados.
-# 4. **`R²` global frente a `R²` por estación.** Parte del `R²` global se debe a las diferencias fijas entre estaciones.
-#    El `R²` mediano por estación, entre `0.32` y `0.34`, es la medida más fiel de lo que el modelo realmente pronostica,
-#    y deja un margen claro para mejorar.
-#
-# Un `R²` moderado no basta por sí mismo para descartar una fuga; lo que la descarta son las comprobaciones de los
-# puntos 1 y 3.
+# Un `R²` moderado no basta para descartar una fuga; lo que la descarta son la auditoría de las predictoras (2.5),
+# la limpieza causal (3.6) y una partición que respeta el tiempo y se complementa con la validación por estación y
+# por bloques geográficos (3.2). Lo que aporta el modelo es la reducción del error frente a la persistencia (3.5),
+# no el valor absoluto del `R²`, porque parte del `R²` global se debe a las diferencias fijas entre estaciones. El
+# `R²` mediano por estación, entre `0.32` y `0.34`, es la medida más fiel de lo que el modelo realmente pronostica,
+# y deja un margen claro para mejorar.
 #
 # ---
 # # 4. Conclusiones y limitaciones
@@ -1977,8 +1964,7 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 # 2. El viento de la región tiene ciclos diario y anual fuertes, un gradiente espacial marcado, con un hotspot en
 #    La Guajira, y una dependencia temporal y espacial que obliga a validar por periodos y por estación.
 # 3. Con una limpieza que no usa información futura, el SVR lineal pronostica la velocidad a 24 h con `R² = 0.737`
-#    (`IC 95 %: 0.71–0.76`) y reduce el error de la persistencia en un `13.2 %` (`IC 95 %: 12–14 %`). No encontramos
-#    diferencias apreciables con el procesamiento original, y la mejora se mantiene en estaciones que no
+#    y reduce el error de la persistencia en un `13.2 %` (sección 3.5); la mejora se mantiene en estaciones que no
 #    participaron en el ajuste y en bloques geográficos separados. Las variables meteorológicas aportan poco a un
 #    modelo lineal, aunque su información mutua con el objetivo sugiere relaciones no lineales.
 # 4. Los residuos conservan estructura temporal, espacial y heterocedástica, y la curva de aprendizaje apunta a un
@@ -1989,10 +1975,8 @@ comparar_comunes(TE_alt, pred_alt, TE, pred_te, "criterio fijado viendo 2025", "
 # sesgada hacia las tierras bajas. Trabajamos con casos completos, así que quedan fuera las estaciones sin sensor
 # de presión o de temperatura. El `R²` global depende del conjunto de estaciones de cada año, por lo que siempre lo
 # acompañamos del `R²` por estación y de la mejora sobre la persistencia. El análisis exploratorio usa una
-# depuración retrospectiva que, en temperatura, incluye un criterio fijado después de ver 2025; el modelado usa la
-# limpieza causal con umbrales fijados antes, y como algunos de ellos se eligieron con datos de 2020–2023, la
-# configuración del modelo se elige con validación en 2024. La hora local es un supuesto que respalda el ciclo
-# diario, pero la fuente no la documenta. Por último, la anticipación real desde que se emite el pronóstico es de
+# depuración retrospectiva (1.6), distinta de la limpieza causal del modelado. La hora local es un supuesto que
+# respalda el ciclo diario, pero la fuente no la documenta. Por último, la anticipación real desde que se emite el pronóstico es de
 # 23 h hasta el inicio de la hora objetivo.
 
 # %%
