@@ -1,0 +1,4 @@
+referencia (los demás 7 modelos como alternativas),p_SPA (Hansen),p_SPA inferior,p_Reality Check (White)
+XGBoost,0.0955,0.0145,0.1545
+Random Forest,0.1715,0.141,0.555
+PADRE por estación + XGBoost,0.8635,0.518,0.988

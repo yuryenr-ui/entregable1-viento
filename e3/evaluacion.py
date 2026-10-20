@@ -190,6 +190,27 @@ def spa(perdida_referencia, perdidas, bloque=7, reps=2000, semilla=SEED):
             "p_Reality Check (White)": float(p["upper"])}
 
 
+def ic_rmse(t, y, preds, bloque=7, reps=2000, semilla=SEED):
+    """IC 95 % del RMSE de cada pronóstico con bootstrap estacionario sobre días.
+
+    Se remuestrean días completos (bloques de longitud media ``bloque``) y en cada réplica el RMSE se calcula con
+    todas las horas de los días elegidos, de modo que se conserva la dependencia dentro de cada día y entre días
+    cercanos.
+
+    Returns
+    -------
+    pandas.DataFrame con el RMSE y los límites del intervalo (percentiles 2.5 y 97.5) de cada pronóstico.
+    """
+    from arch.bootstrap import StationaryBootstrap
+    dia = pd.to_datetime(pd.Series(t)).dt.floor("D").to_numpy()
+    sse = pd.DataFrame({k: (np.asarray(y) - np.asarray(p)) ** 2 for k, p in preds.items()}).groupby(dia).sum()
+    n = pd.Series(1, index=dia).groupby(level=0).sum().reindex(sse.index).to_numpy()
+    bs = StationaryBootstrap(bloque, sse.to_numpy(), n, seed=semilla)
+    rep = np.array([np.sqrt(s.sum(0) / m.sum()) for (s, m), _ in bs.bootstrap(reps)])
+    return pd.DataFrame({"RMSE": np.sqrt(sse.sum() / n.sum()), "IC 95 % inf": np.percentile(rep, 2.5, axis=0),
+                         "IC 95 % sup": np.percentile(rep, 97.5, axis=0)}, index=sse.columns)
+
+
 def ic_bootstrap_estacionario(d, bloque=7, reps=2000, semilla=SEED):
     """IC 95 % de la media de una serie diaria con bootstrap estacionario (Politis y Romano, 1994)."""
     from arch.bootstrap import StationaryBootstrap

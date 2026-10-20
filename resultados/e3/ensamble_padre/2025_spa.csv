@@ -1,0 +1,4 @@
+,p_SPA (Hansen),p_SPA inferior,p_Reality Check (White)
+Random Forest,0.0105,0.006,0.1955
+XGBoost,0.038,0.0015,0.0445
+Ensamble PADRE (5),0.527,0.527,1.0

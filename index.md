@@ -14,8 +14,12 @@ modelo que comparamos con referencias simples.
   última hora observada.
 - **Modelo base:** un SVR lineal, comparado con la persistencia, la climatología y un modelo de media.
   Reduce el error de la persistencia en un `13 %` (`R² = 0.74` en 2025).
-- **Dashboard interactivo:** https://viento-caribe-dashboard.onrender.com (descrito en la última página
-  de este libro).
+- **Comparación de modelos:** siete modelos de regresión con cuatro optimizadores de hiperparámetros y
+  validación anidada temporal. El mejor en 2025 es Random Forest (`RMSE = 0.7227 m/s`).
+- **Modelo propuesto:** un ensamble con regresión por diferencias de pares por estación (PADRE) que
+  supera con diferencia significativa a cada uno de los siete modelos en 2025 (`RMSE = 0.7193 m/s`).
+- **Dashboard interactivo:** https://viento-caribe-dashboard.onrender.com (descrito en su página de
+  este libro).
 
 ## Reproducibilidad
 

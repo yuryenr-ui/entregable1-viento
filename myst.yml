@@ -11,5 +11,6 @@ project:
     - file: entregable1.ipynb
     - file: dashboard.md
     - file: entregable3.ipynb
+    - file: modelo_propuesto.ipynb
 site:
   template: book-theme
