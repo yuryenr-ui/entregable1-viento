@@ -21,6 +21,9 @@
 # python scripts/padre_anidado.py --final    # su evaluación única en 2025
 # python scripts/ensamble_padre.py           # ensamble de 5: 2024 y evaluación única en 2025 (≈ 25 min)
 # python scripts/ensamble_semillas.py        # el ensamble con otras 4 semillas (≈ 1 h)
+# python scripts/padre_anidado.py --optimizador rejilla   # también bayesiana y genetica (≈ 40 min cada uno)
+# python scripts/padre_optimizadores.py      # compara los 4 optimizadores y evalúa el elegido en 2025
+# python scripts/ensamble_optimizadores.py   # el ensamble con cada optimizador (≈ 1 h 15 min)
 # python scripts/padre_solo.py               # variante sin modelos del curso (regla previa)
 # python scripts/merf_anidado.py             # Random Forest de efectos mixtos (regla previa, ≈ 1 h)
 # python scripts/rotacion_anidado.py         # Rotation Forest (regla previa, ≈ 1 h)
@@ -447,6 +450,47 @@ pd.read_csv(RESULTADOS / "padre_comparacion_2025_padre_anidado_pruebas.csv", ind
 # predice la descomposición de la sección 6.1. En 2025 supera con significancia a seis de los siete modelos; frente a
 # Random Forest la diferencia no es significativa (`p = 0.24`). El ensamble agrega a Random Forest, SVR y PADRE-RF, y
 # con eso pasa de empatar a superar a Random Forest.
+#
+# ### Los cuatro optimizadores
+#
+# Como con los siete modelos del capítulo anterior, repetimos la búsqueda con los cuatro optimizadores (rejilla,
+# aleatoria, bayesiana con Optuna y genética con DEAP), con el mismo presupuesto de `40` configuraciones y el mismo
+# esquema anidado. Primero en la variante base: la regla, fijada antes de correr, era quedarse con el optimizador de
+# menor RMSE en 2024 y evaluar solo ese en 2025.
+
+# %%
+po = pd.read_csv(RESULTADOS / "padre_optimizadores.csv", index_col=0)
+display(po.round(4))
+fr_po = json.loads((RESULTADOS / "padre_optimizadores.json").read_text(encoding="utf-8"))
+print(f"Friedman sobre la pérdida diaria de 2024: χ² = {fr_po['friedman_chi2']:.2f}, p = {fr_po['friedman_p']:.4f}")
+print("Nemenyi (p):")
+display(pd.read_csv(RESULTADOS / "padre_optimizadores_nemenyi.csv", index_col=0).round(3))
+pd.read_csv(RESULTADOS / "padre_comparacion_2025_padre_anidado_rejilla_pruebas.csv", index_col=0)[
+    ["dif. media pérdida", "IC 95 %", "DM-HLN", "p DM (Holm)", "p GW (Holm)"]].round(5)
+
+# %% [markdown]
+# La rejilla y la búsqueda aleatoria empatan en RMSE de 2024 (`0.8253`); la rejilla queda primera por menos de una diezmilésima y,
+# siguiendo la regla, es la que llevamos a 2025: `RMSE = 0.7225`. Gana con significancia a seis de los siete modelos y,
+# como la versión aleatoria, empata con Random Forest (`p = 0.51`). Friedman detecta diferencias entre optimizadores
+# en los rangos diarios, pero el RMSE se mueve en la tercera cifra decimal: el optimizador no cambia la conclusión.
+#
+# Después armamos el ensamble de cinco componentes cuatro veces, cada una con un solo optimizador para todos:
+# Random Forest, XGBoost y SVR con la búsqueda de ese optimizador del capítulo anterior, y PADRE-XGB y PADRE-RF con los
+# hiperparámetros que ese optimizador eligió para XGBoost y Random Forest. Es un análisis de sensibilidad declarado
+# antes de correrlo, no una nueva selección: el modelo propuesto no cambia.
+
+# %%
+eo = pd.read_csv(RESULTADOS / "ensamble_optimizadores/resumen.csv", index_col=0)
+fr_eo = json.loads((RESULTADOS / "ensamble_optimizadores/friedman.json").read_text(encoding="utf-8"))
+print(f"Friedman sobre la pérdida diaria de 2024: χ² = {fr_eo['chi2']:.2f}, p = {fr_eo['p']:.2g} ({fr_eo['dias']} días)")
+eo[["RMSE 2024", "rango medio 2024 (Friedman)", "RMSE 2025", "MAE 2025", "R2 2025", "supera con Holm (de 7)",
+    "p Holm vs RF"]].round(4)
+
+# %% [markdown]
+# Con cualquiera de los cuatro optimizadores el ensamble supera con significancia a los siete modelos del curso en
+# 2025 (Diebold-Mariano con Holm); el mayor p frente a Random Forest es `0.026`, con la búsqueda genética. El RMSE de
+# 2025 va de `0.7174` a `0.7205`. El modelo propuesto usa en cada componente el optimizador que eligió su propio bucle
+# externo, y su resultado (`0.7193`) cae dentro de ese rango. La ventaja del ensamble no depende del optimizador.
 
 # %% [markdown]
 # ## 6.8 Otros candidatos y por qué no se adoptaron

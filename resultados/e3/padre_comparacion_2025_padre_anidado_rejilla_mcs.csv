@@ -1,0 +1,9 @@
+Model name,p_MCS,en el conjunto,pérdida media
+PADRE por estación + XGBoost,1.0,True,0.5674540048956025
+Random Forest,0.4825,True,0.5696171612153382
+XGBoost,0.0,False,0.5746485761290424
+SVR,0.068,False,0.5782218642954223
+Ridge,0.068,False,0.5825467621290283
+Lasso,0.068,False,0.5825467920266114
+KNN,0.0,False,0.588603633041231
+Árbol de decisión,0.0,False,0.6306907220234546

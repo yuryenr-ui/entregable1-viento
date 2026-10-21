@@ -5,11 +5,13 @@ Uso (desde la carpeta entregable1):
     python scripts/padre_anidado.py --final     # además, búsqueda con 2024 y evaluación única en 2025
     python scripts/padre_anidado.py --prueba    # versión mínima para comprobar que todo corre
     python scripts/padre_anidado.py --anclas 10 20 40 80   # espacio ampliado (carpeta padre_anidado_a80)
+    python scripts/padre_anidado.py --optimizador rejilla  # otro optimizador (carpeta padre_anidado_rejilla)
 
 Para cada pliegue externo, igual que los 7 modelos del curso:
 - bucle interno con las mismas submuestras (40 mil filas de ajuste y 10 mil de validación por trimestre);
-- búsqueda aleatoria de 40 configuraciones sobre el espacio del XGBoost más los hiperparámetros de PADRE
-  (parejas por fila y anclas). Para cada configuración se elige también el peso ``w`` de la mezcla
+- búsqueda de 40 configuraciones (aleatoria por defecto; ``--optimizador`` elige rejilla, bayesiana o
+  genética, con el mismo presupuesto y las mismas implementaciones de e3/optimizadores.py) sobre el espacio
+  del XGBoost más los hiperparámetros de PADRE (parejas por fila y anclas). Para cada configuración se elige también el peso ``w`` de la mezcla
   ``w · PADRE + (1 − w) · XGBoost``; el XGBoost de la mezcla usa la configuración que eligió su propia búsqueda
   en ese pliegue (Entregable 3), ajustado sobre las mismas submuestras;
 - la configuración y el peso elegidos se reentrenan con todo el entrenamiento del pliegue y se miden una vez.
@@ -30,14 +32,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from e3 import SEED                                                                     # noqa: E402
 from e3.datos import RESULTADOS, TEST_INI, TRIMESTRES, cargar, particion_interna, pliegues_externos  # noqa: E402
 from e3.modelos import ESPACIOS, construir                                              # noqa: E402
-from e3.optimizadores import aleatoria                                                  # noqa: E402
+from e3.optimizadores import OPTIMIZADORES                                                 # noqa: E402
 from e3.padre import ESPACIO_PADRE, PadreEstacion, mejor_peso                           # noqa: E402
 
 warnings.filterwarnings("ignore")
 rmse = lambda a, b: float(np.sqrt(np.mean((a - b) ** 2)))
+CORTOS = {"rejilla": "Rejilla", "aleatoria": "Aleatoria", "bayesiana": "Bayesiana (Optuna)", "genetica": "Genética (DEAP)"}
 
 
-def pliegue_padre(pliegue, cfg, carpeta, TR, TE, F, co, ESPACIO):
+def pliegue_padre(pliegue, cfg, carpeta, TR, TE, F, co, ESPACIO, optimizar):
     salida = carpeta / f"PADRE_XGB__{pliegue}.json"
     if salida.exists():
         return json.loads(salida.read_text(encoding="utf-8"))
@@ -67,7 +70,7 @@ def pliegue_padre(pliegue, cfg, carpeta, TR, TE, F, co, ESPACIO):
         return err
 
     t0 = time.perf_counter()
-    res = aleatoria(ESPACIO, objetivo, cfg["presupuesto"], semilla=SEED)
+    res = optimizar(ESPACIO, objetivo, cfg["presupuesto"], semilla=SEED)
     t_busqueda = time.perf_counter() - t0
     for h in res["historial"]:
         h["peso"] = pesos[tuple(sorted(h["params"].items()))]
@@ -101,9 +104,13 @@ if __name__ == "__main__":
     ap.add_argument("--final", action="store_true", help="incluir la evaluación única en 2025")
     ap.add_argument("--anclas", nargs="+", type=int, default=ESPACIO_PADRE["anclas"][1],
                     help="opciones de anclas del espacio de búsqueda")
+    ap.add_argument("--optimizador", default="aleatoria", choices=list(CORTOS))
     args = ap.parse_args()
     ESPACIO = {**ESPACIOS["XGBoost"], **ESPACIO_PADRE, "anclas": ("cat", args.anclas)}
     sufijo = "" if args.anclas == ESPACIO_PADRE["anclas"][1] else f"_a{max(args.anclas)}"
+    if args.optimizador != "aleatoria":
+        sufijo += f"_{args.optimizador}"
+    optimizar = OPTIMIZADORES[CORTOS[args.optimizador]]
     cfg = ({"prueba": True, "presupuesto": 3, "n_ajuste": 3000, "n_valid": 1000} if args.prueba else
            {"prueba": False, "presupuesto": 40, "n_ajuste": 40000, "n_valid": 10000})
     carpeta = RESULTADOS / (("padre_anidado_prueba" if args.prueba else "padre_anidado") + sufijo)
@@ -116,7 +123,7 @@ if __name__ == "__main__":
     filas = []
     for p in pliegues:
         t0 = time.time()
-        r = pliegue_padre(p, cfg, carpeta, TR, TE, F, co, ESPACIO)
+        r = pliegue_padre(p, cfg, carpeta, TR, TE, F, co, ESPACIO, optimizar)
         filas.append({k: r[k] for k in ["pliegue", "rmse_xgb", "rmse_padre", "rmse", "peso_padre",
                                         "mejor_rmse_interno"]})
         print(p, f"{(time.time() - t0) / 60:.1f} min", {k: (round(v, 4) if isinstance(v, float) else v)
