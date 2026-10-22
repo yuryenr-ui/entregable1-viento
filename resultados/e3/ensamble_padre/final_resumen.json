@@ -1,0 +1,12 @@
+{
+ "segundos_ajuste": 481.1079571247101,
+ "segundos_prediccion_2025": 23.759522438049316,
+ "rmse_2025": 0.719361013586839,
+ "max_dif_cache": 0.07672166527923951,
+ "ida_y_vuelta": {
+  "XGBoost": true,
+  "SVR": true,
+  "PADRE-XGB": true
+ },
+ "spearman_importancia_shap": 0.8796581196581197
+}

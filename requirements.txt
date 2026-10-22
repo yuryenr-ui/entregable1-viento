@@ -6,7 +6,7 @@ scikit-learn==1.9.1
 statsmodels==0.15.0
 matplotlib==3.11.2
 seaborn==0.13.2
-# Entregable 3 (optimización y comparación de modelos)
+# Entregable 2 (optimización y comparación de modelos) y modelo original
 xgboost==3.2.0
 optuna==5.0.0
 deap==1.4.4
@@ -22,3 +22,4 @@ nbconvert
 ipykernel
 jupyter-book==2.1.6
 faiss-cpu==1.15.1
+pytest==9.1.1

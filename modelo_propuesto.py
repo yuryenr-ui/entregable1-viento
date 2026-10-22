@@ -10,7 +10,7 @@
 # información disponible más que la flexibilidad del algoritmo. En este capítulo proponemos un modelo que usa esa
 # información de otra manera: en lugar de aprender el viento de mañana directamente, aprende **cuánto se aparta una
 # hora de otras horas conocidas de la misma estación**. Es la regresión por diferencias de pares (PADRE, *Pairwise
-# Difference Regression*; Tynes et al., 2021), que adaptamos al problema formando los pares dentro de cada estación.
+# Difference Regression*; {cite}`tynes2021`), que adaptamos al problema formando los pares dentro de cada estación.
 # El modelo final promedia dos versiones de PADRE con los tres mejores modelos del capítulo anterior.
 #
 # **Reproducibilidad.** El modelo está en `e3/padre.py` (clase `PadreEstacion`) y los experimentos en `scripts/`.
@@ -95,24 +95,24 @@ print(f"RMSE del ensamble: 2024 {rmse(y24, P24[ENSAMBLE]):.4f} | 2025 {rmse(y_te
 # **PADRE.** Un regresor común aprende `y ≈ f(x)`. PADRE entrena un regresor `g` sobre **pares** de filas
 # `(i, j)` para predecir la diferencia de sus objetivos a partir de la fila `i` y de la diferencia entre ambas:
 #
-# $$g(x_i,\; x_i - x_j) \approx y_i - y_j .$$
+# $$g(x_i,\; x_i - x_j) \approx y_i - y_j .$$ (eq-padre-ajuste)
 #
 # Para pronosticar una fila nueva `x` de la estación `s` se toman `M` filas de entrenamiento de esa estación, las
 # **anclas** `j ∈ A_s`, cuyo objetivo `y_j` ya se conoce, y se promedia lo que cada una predice:
 #
-# $$\hat y(x) = \frac{1}{M} \sum_{j \in A_s} \big[\, y_j + g(x,\; x - x_j) \,\big].$$
+# $$\hat y(x) = \frac{1}{M} \sum_{j \in A_s} \big[\, y_j + g(x,\; x - x_j) \,\big].$$ (eq-padre-prediccion)
 #
 # **Por qué formar los pares dentro de la estación.** Supongamos que el viento de mañana tiene una parte común a
 # todas las estaciones, una parte fija de cada sitio (altitud, rugosidad, exposición a la brisa) y ruido:
 # `y = f(x) + α_s + ε`. Para dos filas de la misma estación,
 #
-# $$y_i - y_j = f(x_i) - f(x_j) + (\varepsilon_i - \varepsilon_j),$$
+# $$y_i - y_j = f(x_i) - f(x_j) + (\varepsilon_i - \varepsilon_j),$$ (eq-cancelacion)
 #
 # es decir, **el efecto del sitio `α_s` se cancela** y `g` solo tiene que aprender cómo cambia el viento cuando
 # cambian las condiciones. El nivel propio de la estación vuelve a entrar por las anclas: si `g` aprende bien la
 # diferencia, `y_j + g(x, x − x_j) ≈ f(x) + α_s + ε_j`, y al promediar
 #
-# $$\hat y(x) \approx f(x) + \alpha_s + \frac{1}{M}\sum_{j \in A_s} \varepsilon_j .$$
+# $$\hat y(x) \approx f(x) + \alpha_s + \frac{1}{M}\sum_{j \in A_s} \varepsilon_j .$$ (eq-anclas)
 #
 # El último término tiene media cero y su varianza baja con `M` (`σ²/M` si los ruidos de las anclas son
 # independientes). Así, el modelo obtiene el nivel de cada estación de sus propios datos, sin tener que deducirlo de
@@ -127,9 +127,9 @@ print(f"RMSE del ensamble: 2024 {rmse(y24, P24[ENSAMBLE]):.4f} | 2025 {rmse(y_te
 # dio peor resultado en 2024 y no se llevó a 2025.
 #
 # **Por qué promediar con los modelos del curso.** Si `f_1, …, f_K` son pronósticos y `f̄` su promedio, para cada
-# fila se cumple la descomposición de ambigüedad (Krogh y Vedelsby, 1995):
+# fila se cumple la descomposición de ambigüedad {cite}`krogh1995`:
 #
-# $$(y - \bar f)^2 = \frac{1}{K}\sum_{k=1}^{K} (y - f_k)^2 \;-\; \frac{1}{K}\sum_{k=1}^{K} (f_k - \bar f)^2 .$$
+# $$(y - \bar f)^2 = \frac{1}{K}\sum_{k=1}^{K} (y - f_k)^2 \;-\; \frac{1}{K}\sum_{k=1}^{K} (f_k - \bar f)^2 .$$ (eq-ambiguedad)
 #
 # *Demostración.* Escribimos `y − f_k = (y − f̄) − (f_k − f̄)`. Al elevar al cuadrado y promediar sobre `k`, el
 # término cruzado es `−2 (y − f̄) · (1/K) Σ (f_k − f̄) = 0`, porque las desviaciones respecto de la media suman cero;
@@ -156,10 +156,113 @@ pd.DataFrame([
 ]).set_index("componente")
 
 # %% [markdown]
+# ### Algoritmo
+#
+# ```text
+# PADRE POR ESTACIÓN
+# Entradas: filas de entrenamiento (x_i, s_i, y_i), i = 1..n, con s_i la estación; P pares por fila; M anclas;
+#           n_min filas mínimas por estación; coordenadas de las estaciones; regresor g; semilla.
+# Salida:   pronóstico ŷ para cada fila nueva (x, s).
+#
+# Entrenamiento
+#   1. para cada estación s:  F(s) ← s si tiene al menos n_min filas;
+#                              si no, la estación más cercana (haversine) que sí las tenga
+#   2. para cada fila i y cada k = 1..P:  sortear j al azar entre las filas de F(s_i)
+#   3. ajustar g sobre las P·n filas z_ij = (x_i, x_i − x_j) con objetivo y_i − y_j   (pérdida cuadrática)
+# Predicción de (x, s)
+#   4. sortear M anclas j_1..j_M entre las filas de F(s)
+#   5. ŷ ← (1/M) Σ_m [ y_{j_m} + g(x, x − x_{j_m}) ]
+# Criterio de parada: el algoritmo no itera; termina tras un único ajuste de g, que tiene su propia parada
+#   (número de árboles en Random Forest; número de rondas en XGBoost).
+#
+# ENSAMBLE PADRE (5)
+#   ŷ_ens(x, s) ← (1/5) [ RF(x) + XGB(x) + SVR(x) + PADRE-XGB(x, s) + PADRE-RF(x, s) ]
+# ```
+#
+# ### Propiedades
+#
+# Las dos demostraciones de arriba dan las propiedades que justifican el diseño:
+#
+# 1. **Cancelación del efecto de la estación** (ecuación {eq}`eq-cancelacion`): con un efecto aditivo y constante
+#    `α_s`, el objetivo de `g` no depende de la estación. Un regresor global tiene que aprender `α_s` de las
+#    coordenadas, la altitud o los rezagos; PADRE no.
+# 2. **Insesgadez condicional y varianza de las anclas** (ecuación {eq}`eq-anclas`): si `g` estima bien la
+#    diferencia, `E[ŷ | x, s] = f(x) + α_s`, el valor esperado del objetivo, y la parte del error que viene de las
+#    anclas tiene varianza `σ²/M` cuando sus ruidos son independientes. Con ruidos correlacionados (horas cercanas de
+#    la misma estación) la reducción es menor; por eso las anclas se sortean en todo el entrenamiento de la estación
+#    y no en sus últimas horas.
+# 3. **Error del ensamble** (ecuación {eq}`eq-ambiguedad`): para cualquier fila, el error cuadrático del promedio
+#    nunca supera el promedio de los errores de los componentes, y la ganancia es exactamente su desacuerdo.
+#
+# ### Complejidad
+#
+# Sea `T_g(n, p)` el costo de ajustar el motor con `n` filas y `p` columnas. PADRE construye `P·n` pares de `2p`
+# columnas, así que entrenar cuesta `O(P·n·p)` para armar los pares más `T_g(P·n, 2p)`; con Random Forest de `B`
+# árboles y `m = φ·2p` columnas candidatas por corte, `T_g = O(B · m · P n log(P n))`. Predecir `q` filas cuesta
+# `O(M·q·p)` para armar los pares más `M·q` evaluaciones del motor (`O(M·q·B·d)` con árboles de profundidad `d`).
+# La memoria es `O(n·p)`, porque las anclas exigen guardar el entrenamiento. Lo contrastamos con tiempos medidos al
+# variar `n` y `p` (`scripts/padre_complejidad.py`; mediana de 3 repeticiones):
+
+# %%
+cx = pd.read_csv(RESULTADOS / "padre_complejidad.csv")
+ex = pd.read_csv(RESULTADOS / "padre_complejidad_exponentes.csv", index_col=[0, 1])
+fig, axs = plt.subplots(1, 2, figsize=(11, 3.8))
+for ax, eje in zip(axs, ["n", "p"]):
+    for m, g in cx[cx.eje == eje].groupby("modelo"):
+        ax.plot(g[eje], g["ajuste (s)"], marker="o", label=m)
+    ax.set_xscale("log"), ax.set_yscale("log")
+    ax.set_xlabel("filas de entrenamiento n (p = 26)" if eje == "n" else "predictoras p (n = 20 000)")
+    ax.set_ylabel("tiempo de ajuste (s)")
+axs[0].legend(fontsize=8)
+fig.suptitle("Tiempo de ajuste medido (escala log-log)")
+plt.tight_layout()
+plt.show()
+ex.round(2)
+
+# %% [markdown]
+# Con Random Forest como motor, el exponente empírico en `n` es `1.17` para PADRE-RF y `1.09` para Random Forest
+# solo, coherente con `n log n`, y en `p` es `1.11`, coherente con el costo lineal en las columnas candidatas.
+# PADRE-RF tarda unas diez veces lo que Random Forest con las mismas filas: cuatro veces más filas y el doble de
+# columnas. Con XGBoost en GPU el tiempo casi no crece en este rango (exponentes cercanos a `0`), porque domina un
+# costo fijo de unos `2 s` (copiar los datos a la GPU e iniciar el modelo); el término `P·n` solo se nota en las
+# muestras grandes. La predicción crece con `M`: predecir `5 000` filas con PADRE-RF toma unos `0.5 s`, diez veces
+# más que con Random Forest.
+#
+# ### Implementación y pruebas unitarias
+#
+# El algoritmo está programado en `e3/modelo_original.py` con dos clases compatibles con scikit-learn
+# (`BaseEstimator` y `RegressorMixin`): `PadreEstacionRegresor`, que recibe la estación como primera columna de
+# `X` y cualquier regresor como motor, y `EnsamblePadre`, el promedio simple de componentes. Solo usan numpy y
+# pandas; el motor `g` es un parámetro. Este es el núcleo del ajuste y de la predicción:
+
+# %%
+import inspect
+from e3.modelo_original import PadreEstacionRegresor
+for metodo in ["fit", "predict"]:
+    print(inspect.getsource(getattr(PadreEstacionRegresor, metodo)))
+
+# %% [markdown]
+# La clase reproduce exactamente los pronósticos usados en este capítulo (diferencia máxima `0.0` en el pliegue
+# 2024-T1). Las pruebas unitarias (`tests/test_modelo_original.py`, con pytest) verifican que (i) aprende una
+# solución conocida en datos sintéticos `y = 2·x₁ − x₂ + α_s + ε`, recupera las pendientes y supera a un modelo
+# global que no puede representar `α_s`; (ii) da las mismas predicciones con la misma semilla y otras con otra
+# semilla; (iii) rechaza NaN, infinitos, columnas de más o de menos, predecir sin ajustar e hiperparámetros no
+# válidos; (iv) funciona con `clone`, dentro de un `Pipeline` y con `cross_val_score`; además, que una estación sin
+# datos toma la vecina más cercana y que el ensamble es el promedio de sus componentes.
+
+# %%
+import subprocess
+r = subprocess.run([sys.executable, "-m", "pytest", "tests", "-q", "--color=no", "-p", "no:cacheprovider"],
+                   capture_output=True, text=True)
+print(r.stdout[-600:])
+
+# %% [markdown]
 # ## 6.2 Originalidad
 #
-# PADRE se propuso en química computacional para predecir propiedades de moléculas con pocos datos. Buscamos su
-# uso en viento el 19 de octubre de 2026 con la cadena `("wind speed" OR "wind power" OR "wind forecast*") AND
+# PADRE se propuso en química computacional para predecir propiedades de moléculas con pocos datos
+# {cite}`tynes2021`. En las búsquedas que documentamos en el capítulo 7 (cinco bases y ocho cadenas en inglés y
+# español) ningún trabajo lo aplica al pronóstico de viento. Las primeras consultas fueron en Scopus y Web of
+# Science el 19 de octubre de 2026, con la cadena `("wind speed" OR "wind power" OR "wind forecast*") AND
 # ("pairwise difference regression" OR "pairwise difference" OR "PADRE")`:
 #
 # | Fuente | Resultados | Aplican PADRE a viento |
@@ -168,10 +271,10 @@ pd.DataFrame([
 # | Web of Science (tema) | `65` | `0`: tres son lugares llamados *Padre*; los demás no contienen los términos en título, resumen ni palabras clave |
 # | Artículos que citan a Tynes et al. (2021), según Semantic Scholar | `≈ 58` | `0`: casi todos son de química, materiales y fármacos; los más cercanos tratan carga eléctrica y tráfico urbano |
 #
-# Ningún trabajo aplica la regresión por diferencias de pares al pronóstico de viento, y la variante por estación,
-# con anclas del mismo sitio y respaldo en la vecina geográfica, es propia de este trabajo. Tampoco es un *import*:
+# La variante por estación, con anclas del mismo sitio y respaldo en la vecina geográfica, es propia de este
+# trabajo, y el capítulo 7 la compara con los métodos más cercanos de otras familias. Tampoco es un *import*:
 # ninguna biblioteca trae PADRE; el conjunto de pares, el sorteo de anclas y la regla de la vecina están
-# implementados en `e3/padre.py`.
+# implementados en `e3/modelo_original.py`.
 
 # %% [markdown]
 # ## 6.3 Diseño de la evaluación

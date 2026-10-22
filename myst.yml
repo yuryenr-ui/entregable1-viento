@@ -6,6 +6,8 @@ project:
     - name: Yuryen Rollo
     - name: Betzaida Ruiz
   license: CC-BY-SA-4.0
+  bibliography:
+    - references.bib
   toc:
     - file: index.md
     # numeración del profesor; los nombres de archivo se conservan para no romper los enlaces ya entregados
@@ -20,6 +22,11 @@ project:
         - file: entregable3.ipynb
     - title: "Entregable 3: modelo original"
       children:
+        - file: correcciones.md
         - file: modelo_propuesto.ipynb
+        - file: literatura.md
+        - file: validacion.ipynb
+        - file: conclusiones.md
+        - file: reproducibilidad.ipynb
 site:
   template: book-theme

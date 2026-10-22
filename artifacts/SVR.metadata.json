@@ -1,0 +1,182 @@
+{
+ "modelo": "SVR",
+ "semilla": 42,
+ "versiones": {
+  "python": "3.11.16",
+  "numpy": "2.4.6",
+  "pandas": "3.0.6",
+  "scikit-learn": "1.9.1",
+  "xgboost": "3.2.0",
+  "joblib": "1.5.3"
+ },
+ "hiperparametros": {
+  "C": 9.999999999999993,
+  "kernel": "rbf",
+  "gamma": 0.0010000000000000002,
+  "epsilon": 0.0
+ },
+ "esquema_entrada": [
+  {
+   "columna": "vel_l0",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 13.583333
+  },
+  {
+   "columna": "vel_l1",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 14.349999
+  },
+  {
+   "columna": "vel_l2",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 16.433334
+  },
+  {
+   "columna": "vel_l3",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 17.733332
+  },
+  {
+   "columna": "vel_l6",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 17.733332
+  },
+  {
+   "columna": "vel_l12",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 17.733332
+  },
+  {
+   "columna": "vel_l23",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 15.533333
+  },
+  {
+   "columna": "vel_m24",
+   "tipo": "float32",
+   "min": 0.2340277858333333,
+   "max": 9.607222241666667
+  },
+  {
+   "columna": "hy_sin",
+   "tipo": "float32",
+   "min": -1.0,
+   "max": 1.0
+  },
+  {
+   "columna": "hy_cos",
+   "tipo": "float32",
+   "min": -1.0,
+   "max": 1.0
+  },
+  {
+   "columna": "u",
+   "tipo": "float32",
+   "min": -9.9525043642806,
+   "max": 10.57066418639349
+  },
+  {
+   "columna": "w",
+   "tipo": "float32",
+   "min": -11.77391178,
+   "max": 8.2952720585544
+  },
+  {
+   "columna": "u_m24",
+   "tipo": "float32",
+   "min": -8.452441060035683,
+   "max": 5.849155214035748
+  },
+  {
+   "columna": "w_m24",
+   "tipo": "float32",
+   "min": -8.713287732565133,
+   "max": 5.217084231967329
+  },
+  {
+   "columna": "dir_constancia",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 1.0
+  },
+  {
+   "columna": "temp",
+   "tipo": "float32",
+   "min": 3.3,
+   "max": 44.9
+  },
+  {
+   "columna": "temp_d24",
+   "tipo": "float32",
+   "min": -19.500000000000004,
+   "max": 17.9
+  },
+  {
+   "columna": "temp_amp24",
+   "tipo": "float32",
+   "min": 1.1000000000000014,
+   "max": 38.1
+  },
+  {
+   "columna": "pres",
+   "tipo": "float32",
+   "min": 774.2,
+   "max": 1018.8
+  },
+  {
+   "columna": "pres_d3",
+   "tipo": "float32",
+   "min": -12.359960000000001,
+   "max": 19.800000000000068
+  },
+  {
+   "columna": "pres_d24",
+   "tipo": "float32",
+   "min": -14.299999999999955,
+   "max": 13.599999999999909
+  },
+  {
+   "columna": "doy_sin",
+   "tipo": "float32",
+   "min": -0.9999994220246925,
+   "max": 0.9999855506507186
+  },
+  {
+   "columna": "doy_cos",
+   "tipo": "float32",
+   "min": -0.9999791929590823,
+   "max": 0.9999907524084426
+  },
+  {
+   "columna": "altitud",
+   "tipo": "float32",
+   "min": 2.0,
+   "max": 2200.0
+  },
+  {
+   "columna": "vel_vecinos",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 23.966667
+  },
+  {
+   "columna": "vel_vecinos_m24",
+   "tipo": "float32",
+   "min": 0.0,
+   "max": 9.846527737499999
+  }
+ ],
+ "metricas_bucle_externo": {
+  "RMSE bucle externo (media)": 0.899883872835016,
+  "RMSE bucle externo (DE)": 0.0943825934495776
+ },
+ "tamano_MB": 0.7,
+ "prueba_ida_y_vuelta": true
+}
