@@ -2,7 +2,7 @@
 
 Usa los pronósticos guardados por ``mt_oos.py`` y ``padre_exploracion.py`` (motores XGBoost y Random Forest).
 Para cada combinación reporta el RMSE por trimestre, el RMSE con todas las filas de 2024 y la prueba de
-Diebold-Mariano contra XGBoost (el modelo elegido en el Entregable 3) y contra Random Forest: diferencia de
+Diebold-Mariano contra XGBoost (el modelo elegido en el Entregable 2) y contra Random Forest: diferencia de
 pérdidas cuadráticas promediada por hora de emisión entre estaciones, con varianza de Newey-West a 24 rezagos.
 La configuración de la corrección es fija (λ₁ = λ₂ = 1000) y 2025 no se usa.
 """

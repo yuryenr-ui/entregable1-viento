@@ -10,7 +10,7 @@ estación: el regresor aprende cuánto se aparta una hora de otras horas conocid
 de la estación (altitud, rugosidad, exposición) se cancela en la diferencia. Una estación con menos de
 ``min_filas`` filas de entrenamiento toma sus pares y anclas de la estación vecina más cercana con datos.
 
-El pronóstico final mezcla PADRE con el XGBoost del Entregable 3: ``w · PADRE + (1 − w) · XGBoost``, con ``w``
+El pronóstico final mezcla PADRE con el XGBoost del Entregable 2: ``w · PADRE + (1 − w) · XGBoost``, con ``w``
 elegido en la validación interna.
 """
 import numpy as np

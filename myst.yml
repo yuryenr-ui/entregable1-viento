@@ -8,9 +8,18 @@ project:
   license: CC-BY-SA-4.0
   toc:
     - file: index.md
-    - file: entregable1.ipynb
-    - file: dashboard.md
-    - file: entregable3.ipynb
-    - file: modelo_propuesto.ipynb
+    # numeración del profesor; los nombres de archivo se conservan para no romper los enlaces ya entregados
+    - title: "Entregable 1: datos, EDA y modelo base"
+      children:
+        - file: entregable1.ipynb
+    - title: "Entregable 1.5: dashboard"
+      children:
+        - file: dashboard.md
+    - title: "Entregable 2: comparación de modelos"
+      children:
+        - file: entregable3.ipynb
+    - title: "Entregable 3: modelo original"
+      children:
+        - file: modelo_propuesto.ipynb
 site:
   template: book-theme

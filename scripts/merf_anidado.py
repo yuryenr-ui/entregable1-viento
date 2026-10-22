@@ -1,4 +1,4 @@
-"""Validación anidada del Random Forest de efectos mixtos (MERF), con el mismo esquema del Entregable 3.
+"""Validación anidada del Random Forest de efectos mixtos (MERF), con el mismo esquema del Entregable 2.
 
 Uso (desde la carpeta entregable1):
     python scripts/merf_anidado.py            # 2024 y, si se cumple la regla, la evaluación única en 2025
@@ -6,12 +6,12 @@ Uso (desde la carpeta entregable1):
 
 Esquema (igual que los 7 modelos del curso): bucle externo con los 4 trimestres de 2024, bucle interno con los 3
 trimestres anteriores y las mismas submuestras (40 mil filas de ajuste y 10 mil de validación), búsqueda
-aleatoria de 40 configuraciones con la semilla 42. El espacio es el del Random Forest del Entregable 3 más dos
+aleatoria de 40 configuraciones con la semilla 42. El espacio es el del Random Forest del Entregable 2 más dos
 hiperparámetros propios: qué coeficientes varían por estación y con cuántos días recientes se estima el efecto de
 cada estación. La configuración elegida se reentrena con todo el entrenamiento del pliegue y se mide una vez.
 
 Regla fijada ANTES de ver los resultados (18/10/2026): con los 4 trimestres de 2024 se compara MERF con el
-Random Forest del Entregable 3 mediante Diebold-Mariano (HLN) sobre la pérdida diaria. Solo si MERF tiene menor
+Random Forest del Entregable 2 mediante Diebold-Mariano (HLN) sobre la pérdida diaria. Solo si MERF tiene menor
 pérdida y p < 0.05 se ejecuta la búsqueda final y la evaluación única en 2025. Si no, MERF se reporta como
 intento y 2025 no se usa. La decisión queda en resultados/e3/merf_anidado/decision.json.
 """
@@ -38,7 +38,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 VENTANAS = {"toda la historia": None, "último año": 365}
 ESPACIO = {**ESPACIOS["Random Forest"], "efectos": ("cat", list(EFECTOS)), "ventana": ("cat", list(VENTANAS))}
 ITERACIONES = 3
-RF = "Random_Forest__Bayesiana_Optuna"      # el Random Forest elegido por el bucle externo del Entregable 3
+RF = "Random_Forest__Bayesiana_Optuna"      # el Random Forest elegido por el bucle externo del Entregable 2
 rmse = lambda a, b: float(np.sqrt(np.mean((a - b) ** 2)))
 
 

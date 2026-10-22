@@ -92,7 +92,7 @@ def padre(params, tr, va, variante, rng, motor="XGBoost"):
     return (y[jv] + m.predict(rasgos(iv, jv))).reshape(len(va), ANCLAS).mean(1)
 
 
-# Motor de PADRE y la corrida del Entregable 3 de la que salen sus hiperparámetros y su pronóstico directo
+# Motor de PADRE y la corrida del Entregable 2 de la que salen sus hiperparámetros y su pronóstico directo
 MOTORES = {"XGBoost": ("XGBoost__Aleatoria", "XGB", "padre_exploracion.csv"),  # argumentos: motor [variantes]
            "Random Forest": ("Random_Forest__Bayesiana_Optuna", "RF", "padre_rf.csv")}
 

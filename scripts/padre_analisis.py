@@ -1,4 +1,4 @@
-"""Análisis complementarios del modelo propuesto (PADRE por estación + XGBoost) con las pruebas del Entregable 3.
+"""Análisis complementarios del modelo propuesto (PADRE por estación + XGBoost) con las pruebas del Entregable 2.
 
 Uso (desde la carpeta entregable1, después de ``padre_anidado.py --final``):
     python scripts/padre_analisis.py

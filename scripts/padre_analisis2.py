@@ -1,11 +1,11 @@
-"""Segunda parte de los análisis del modelo propuesto: lo que la guía del Entregable 3 pide y aún faltaba.
+"""Segunda parte de los análisis del modelo propuesto: lo que la guía del Entregable 2 pide y aún faltaba.
 
 Uso (desde la carpeta entregable1, después de ``padre_analisis.py``):
     python scripts/padre_analisis2.py
 
 1. IC 95 % del RMSE de 2025 con bootstrap estacionario por días (los 7 modelos y el propuesto) y de la
    diferencia de RMSE frente a XGBoost y Random Forest.
-2. Reality Check y SPA con tres referencias: XGBoost (elegido en el Entregable 3), Random Forest (mejor del
+2. Reality Check y SPA con tres referencias: XGBoost (elegido en el Entregable 2), Random Forest (mejor del
    curso en 2025) y el propuesto (¿algún modelo del curso lo supera?).
 3. Figuras: entrenamiento, validación y prueba; residuos; diagrama de diferencia crítica; convergencia.
 4. SHAP (explicador por permutación sobre la mezcla completa) y LIME para el modelo propuesto.

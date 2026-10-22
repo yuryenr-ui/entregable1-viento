@@ -1,4 +1,4 @@
-"""Compara PADRE por estación + XGBoost con los 7 modelos del curso, con las mismas pruebas del Entregable 3.
+"""Compara PADRE por estación + XGBoost con los 7 modelos del curso, con las mismas pruebas del Entregable 2.
 
 Uso (desde la carpeta entregable1):
     python scripts/padre_comparacion.py 2024 [carpeta]   # 4 trimestres de 2024 (bucle externo)
@@ -6,7 +6,7 @@ Uso (desde la carpeta entregable1):
 
 ``carpeta`` es la salida de ``padre_anidado.py`` (``padre_anidado`` por defecto, ``padre_anidado_a80`` para el
 espacio ampliado). Cada modelo del curso entra con el optimizador que eligió su bucle externo en el
-Entregable 3. Pruebas sobre la pérdida cuadrática diaria: Diebold-Mariano con la corrección de Harvey,
+Entregable 2. Pruebas sobre la pérdida cuadrática diaria: Diebold-Mariano con la corrección de Harvey,
 Leybourne y Newbold y ajuste de Holm, Giacomini-White e intervalo de bootstrap estacionario de la diferencia,
 y el Model Confidence Set con α = 0.10.
 """

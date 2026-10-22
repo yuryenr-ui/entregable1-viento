@@ -80,6 +80,35 @@ print(f"Entrenamiento: {len(TR):,} filas ({TR.est.nunique()} estaciones) | prueb
       f"({TE.est.nunique()} estaciones) | {len(F)} predictoras | semilla {SEED}")
 
 # %% [markdown]
+# ## 5.0 Hallazgos nuevos sobre los datos
+#
+# Al construir la validación por trimestres encontramos rasgos del conjunto de modelado que el análisis
+# exploratorio del capítulo anterior no mostraba y que condicionan la lectura de los resultados.
+
+# %%
+D = pd.concat([TR, TE])
+anual = D.groupby(D.t.dt.year).agg(filas=("y", "size"), estaciones=("est", "nunique"), media=("y", "mean"),
+                                   percentil_99=("y", lambda s: s.quantile(.99)))
+anual.index.name = "año de emisión"
+sin_2024 = ~TE.est.isin(set(TR[TR.t.dt.year == 2024].est))
+nuevas = ~TE.est.isin(set(TR.est))
+ks = stats.ks_2samp(TR[TR.t.dt.year == 2024].y, y_te)
+print(f"2025: {sin_2024.groupby(TE.est).first().sum()} estaciones sin datos en 2024 ({100 * sin_2024.mean():.1f} % de "
+      f"las filas); {nuevas.groupby(TE.est).first().sum()} sin ningún dato de entrenamiento ({100 * nuevas.mean():.1f} %)")
+print(f"Objetivo 2024 frente a 2025: KS = {ks.statistic:.3f} (p = {ks.pvalue:.1g})")
+anual.round(3)
+
+# %% [markdown]
+# El tamaño de la red cambia mucho de un año a otro: 2025 tiene `213 972` filas de `53` estaciones, casi tres veces
+# las de 2024 (`71 871` de `39`). En 2025, `16` estaciones no tenían datos en 2024 y reúnen el `16.5 %` de las
+# filas, y `5` de ellas no aparecen en ningún año de entrenamiento (`7.7 %`). La distribución del objetivo, en
+# cambio, casi no varía: la media pasa de `1.86` a `1.79 m/s` y la distancia de Kolmogorov-Smirnov es de `0.032`
+# (significativa con tantas filas, pero pequeña). Esto tiene dos consecuencias para lo que sigue. El RMSE de cada
+# periodo depende de qué estaciones lo componen, así que solo comparamos modelos dentro de un mismo periodo y no
+# el RMSE de 2024 con el de 2025. Y la prueba de 2025 mide también cómo generaliza cada modelo a estaciones que no
+# vio en el último año.
+
+# %% [markdown]
 # ## 5.1 Diseño experimental
 #
 # **Validación anidada temporal.** El bucle externo son los cuatro trimestres de 2024: para cada uno
@@ -402,6 +431,22 @@ for t, d in s.groupby("tipo"):
 #   con un RMSE casi igual (`0.6235` frente a `0.6246`). Extrapolando, el núcleo completo con 400 mil filas
 #   tardaría horas por ajuste.
 
+# %%
+# KNN: búsqueda exacta y aproximada de vecinos con FAISS (scripts/e3_faiss.py; 160 mil filas, 10 mil consultas, k = 50)
+pd.read_csv(RESULTADOS / "computacional" / "knn_faiss.csv").set_index("variante").round(4)
+
+# %% [markdown]
+# En KNN el costo está en la consulta, así que comparamos también la búsqueda de vecinos de FAISS. Con la búsqueda
+# exacta (`IndexFlatL2`), FAISS encuentra los mismos vecinos que scikit-learn en menos de la mitad del tiempo
+# (`1.56 s` frente a `3.57 s` para 10 mil consultas), porque calcula las distancias con productos de matrices
+# optimizados. Las búsquedas aproximadas cambian exactitud por velocidad. HNSW (un grafo de vecinos navegable)
+# responde 14 veces más rápido (`0.26 s`) y recupera el `99.6 %` de los 50 vecinos exactos, con un RMSE que solo sube
+# `0.0003 m/s`. IVF (agrupa los datos en 400 celdas y solo revisa las 8 más cercanas a cada consulta) es 44 veces más
+# rápido (`0.08 s`), pero recupera el `90 %` de los vecinos y el RMSE sube `0.0012 m/s`. A cambio, los índices
+# aproximados hay que construirlos: `0.6 s` en IVF y `1.8 s` en HNSW, frente a casi nada en la búsqueda exacta. Con
+# 10 mil consultas la búsqueda exacta todavía es razonable; con millones de consultas, HNSW sería la opción, porque
+# casi no pierde exactitud.
+
 # %% [markdown]
 # ### Parada temprana, paralelismo y perfilamiento
 
@@ -452,6 +497,10 @@ met["IC 95 % mejora diaria media"] = pd.Series(ic)
 met.round(4)
 
 # %%
+# IC 95 % del RMSE de 2025: bootstrap estacionario que remuestrea días completos (bloques de 7 días)
+ev.ic_rmse(TE.t, y_te, pred_te | {"Persistencia (24 h)": pers_te}).round(4)
+
+# %%
 MEJOR = orden_modelos[0]
 r_mejor, p_mejor = leer(MEJOR, elegido[MEJOR], "final")
 print(f"Mejor modelo según el bucle externo: {MEJOR} con {elegido[MEJOR]}")
@@ -479,7 +528,9 @@ print(f"RMSE entrenamiento (2020–2024): {np.sqrt(np.mean((y_tr - p_tr) ** 2)):
 # modesta: Random Forest mejora a Ridge en `0.010 m/s` (`1.4 %`). Ridge y Lasso coinciden porque la regularización
 # elegida es casi nula en Lasso y moderada en Ridge, y con 400 mil filas ambas dan prácticamente los mismos
 # coeficientes. La última columna es el intervalo de confianza de la mejora diaria media sobre la persistencia, con
-# bootstrap estacionario de bloques de 7 días.
+# bootstrap estacionario de bloques de 7 días. Los intervalos del RMSE (segunda tabla) se solapan entre los seis
+# mejores modelos, todos entre `0.69` y `0.77 m/s`: la variación entre días pesa más que las diferencias entre
+# modelos, y por eso las comparaciones de la sección 5.7 usan diferencias pareadas día a día.
 #
 # Que Random Forest gane en 2025 mientras el bucle externo eligió XGBoost no es una contradicción: la diferencia en
 # 2024 fue de `0.001 m/s` a favor de XGBoost y en 2025 es de `0.004 m/s` a favor de Random Forest, ambas dentro de la
@@ -534,6 +585,42 @@ plt.show()
 # horaria, el pronóstico es mucho más suave que la persistencia: sigue el ciclo diario y los cambios de régimen de
 # varios días, pero no anticipa los picos de una o dos horas.
 
+# %%
+# la misma figura para los siete modelos, en la misma estación (media diaria)
+filas_est = np.flatnonzero((TR.est == EST).to_numpy())
+val_est = TR.est.iloc[val_idx].to_numpy() == EST
+te_est = (TE.est == EST).to_numpy()
+fig, axs = plt.subplots(4, 2, figsize=(13, 11), sharex=True, sharey=True)
+for ax, m in zip(axs.flat, orden_modelos):
+    r_m, p_te_m = leer(m, elegido[m], "final")
+    mod = construir(m, r_m["mejor_params"], n_jobs=16).fit(X_tr, y_tr)
+    p_val_m = np.concatenate([leer(m, elegido[m], n)[1] for n in PLIEGUES])
+    tramos = [("entrenamiento (ajuste)", TR.t_y.iloc[filas_est], mod.predict(X_tr[filas_est]), "C0"),
+              ("validación (2024)", TR.t_y.iloc[val_idx][val_est], p_val_m[val_est], "C2"),
+              ("prueba (2025)", TE.t_y[te_est], p_te_m[te_est], "C3")]
+    ax.plot(obs.index, obs, color="0.6", lw=.6)
+    for nombre, t_, p_, c in tramos:
+        d = pd.Series(p_, index=pd.to_datetime(np.asarray(t_)))
+        if nombre.startswith("entrenamiento"):
+            d = d[d.index < TRIMESTRES[4]]
+        d = d.groupby(d.index.floor("D")).mean()
+        ax.plot(d.index, d, ".", ms=1.5, color=c, label=nombre)
+    rm = np.sqrt(np.mean((y_te[te_est] - p_te_m[te_est]) ** 2))
+    ax.set_title(f"{m} (RMSE 2025 en la estación: {rm:.3f})", fontsize=9)
+    ax.set_xlim(pd.Timestamp("2022-01-01"), None)
+axs.flat[-1].axis("off")
+axs.flat[0].legend(fontsize=7, markerscale=5)
+fig.suptitle(f"Media diaria observada (gris) y pronosticada, estación {EST}", y=1.0)
+plt.tight_layout()
+plt.show()
+
+# %% [markdown]
+# Los siete modelos siguen la media diaria observada de forma muy parecida en los tres tramos, y en ninguno las
+# predicciones de entrenamiento se pegan más a lo observado que las de validación o prueba, que es lo que se vería
+# si alguno memorizara el entrenamiento. En esta estación el RMSE de 2025 va de `1.160` (XGBoost) a `1.209 m/s` (KNN):
+# las diferencias entre modelos son mucho menores que la variación del viento de un día a otro, igual que en el
+# conjunto completo.
+
 # %% [markdown]
 # ### Diagnóstico de residuos
 
@@ -578,6 +665,30 @@ plt.show()
 # La media del residuo es prácticamente cero (`0.007 m/s`). Este diagnóstico sugiere, para el modelo final, una
 # pérdida o una transformación que tenga en cuenta la heterocedasticidad y el uso de errores recientes como
 # predictoras.
+
+# %%
+# el mismo diagnóstico para los siete modelos
+filas = []
+rng_norm = np.random.default_rng(SEED)
+for m, p in pred_te.items():
+    e = y_te - p
+    w_ = ev.prueba_white(e, X_te)
+    ind_ = ev.pruebas_independencia(TE.est.to_numpy(), TE.t.to_numpy(), e)
+    filas.append({"modelo": m, "RMSE": np.sqrt(np.mean(e ** 2)), "MAE": np.mean(np.abs(e)), "p White": w_["p_valor"],
+                  "% estaciones BDS p < 0.05": 100 * (ind_.p_BDS < .05).mean(),
+                  "% estaciones Ljung-Box p < 0.05": 100 * (ind_.p_LjungBox < .05).mean(),
+                  "p Jarque-Bera": stats.jarque_bera(e).pvalue,
+                  "p D'Agostino (n = 5 000)": stats.normaltest(rng_norm.choice(e, 5000, replace=False)).pvalue,
+                  "asimetría": stats.skew(e), "curtosis en exceso": stats.kurtosis(e)})
+pd.DataFrame(filas).set_index("modelo").round(4)
+
+# %% [markdown]
+# Los siete modelos comparten el mismo diagnóstico. White rechaza la homocedasticidad en todos (`p ≈ 0`), BDS y
+# Ljung-Box rechazan la independencia en las `53` estaciones, y Jarque-Bera y D'Agostino rechazan la normalidad. A
+# D'Agostino lo aplicamos sobre `5 000` residuos, porque con `213 972` cualquier desviación mínima resulta
+# significativa; aun así rechaza. La asimetría va de `0.73` a `0.91` y la curtosis en exceso es cercana a `4` en
+# todos. Ningún algoritmo elimina la estructura de los residuos, lo que refuerza la conclusión de que el límite
+# lo pone la información disponible y no la flexibilidad del modelo.
 
 # %% [markdown]
 # ## 5.5 Interpretabilidad
@@ -630,6 +741,29 @@ imp.head(12).round(3)
 # correlacionados, la ganancia se la lleva la variable que el árbol usa primero; SHAP reparte mejor el crédito
 # entre variables redundantes.
 
+# %%
+# explicación local: el pronóstico con menor y con mayor error absoluto entre los 3 000 de la muestra
+p_s = booster.predict(xgb.DMatrix(Xs))
+err_s = np.abs(y_te[idx_shap] - p_s)
+locales = {"bien predicho": int(np.argmin(err_s)), "error alto": int(np.argmax(err_s))}
+for titulo, j in locales.items():
+    shap.plots.waterfall(shap.Explanation(shap_vals[j], base, Xs.iloc[j].to_numpy(), feature_names=F),
+                         max_display=10, show=False)
+    plt.title(f"{titulo}: ŷ = {p_s[j]:.2f} m/s, observado = {y_te[idx_shap][j]:.2f} m/s, "
+              f"estación {TE.est.iloc[idx_shap[j]]}", fontsize=10)
+    plt.show()
+pd.DataFrame({t: Xs.iloc[j][["vel_l0", "vel_l23", "vel_m24", "hy_cos"]] for t, j in locales.items()}).T.round(2)
+
+# %% [markdown]
+# Los dos gráficos de cascada parten del valor base (`1.99 m/s`, el pronóstico medio) y suman el aporte de cada
+# variable hasta llegar a la predicción. En el pronóstico bien predicho (`3.33 m/s` pronosticados y observados), la
+# velocidad actual aporta `+0.61`, la de hace 23 h `+0.30` y la media de 24 h `+0.15`: el día viene ventoso y el
+# modelo lo prolonga. En el de error alto, el modelo pronostica `3.88 m/s` y se observan `8.43 m/s`. Las mismas
+# variables empujan hacia arriba, incluso con más fuerza (`+0.76`, `+0.40` y `+0.39`), pero nada en las predictoras
+# anunciaba que el viento se iba a duplicar en las horas siguientes. El error no viene de una variable mal
+# interpretada, sino de un cambio de régimen que la historia de la estación no contiene, que es el mismo límite de
+# información que señalan los residuos.
+
 # %% [markdown]
 # ### LIME
 
@@ -662,6 +796,19 @@ plt.show()
 # hacia arriba en casi `0.9 m/s`. El `R²` local indica qué tan bien la aproximación lineal describe al modelo cerca
 # de ese punto: es alto con viento fuerte (`0.68`) y bajo en el caso típico (`0.12`), donde la explicación local es
 # solo orientativa.
+#
+# **SHAP frente a LIME.** Las dos técnicas explican un pronóstico como una suma de aportes de las variables, pero
+# los obtienen de forma distinta. SHAP reparte la diferencia entre la predicción y el valor base con los valores de
+# Shapley, que promedian el aporte de cada variable sobre todas las coaliciones posibles; con TreeSHAP el cálculo
+# es exacto para un modelo de árboles y los aportes suman exactamente la predicción. LIME perturba el punto, ajusta
+# un modelo lineal ponderado por cercanía y lee sus coeficientes: la explicación es una aproximación que depende del
+# tamaño del vecindario, de cómo se discretizan las variables y del muestreo, y no tiene por qué sumar la
+# predicción. Por eso pueden divergir en tres situaciones: cuando el modelo es muy no lineal cerca del punto (el
+# `R²` local bajo del caso típico lo advierte); cuando las variables están muy correlacionadas, porque LIME las
+# perturba por separado y evalúa combinaciones que no ocurren en los datos, como una velocidad actual alta con
+# una media de 24 h baja; y cuando hay interacciones fuertes, que un modelo lineal aditivo no representa. En
+# nuestros casos las dos coinciden en las variables principales y en el signo de sus aportes, lo que da
+# confianza en la explicación.
 
 # %% [markdown]
 # ## 5.6 Robustez y sobreajuste

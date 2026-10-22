@@ -1,4 +1,4 @@
-"""Validación anidada del modelo propuesto: PADRE por estación + XGBoost, con el mismo esquema del Entregable 3.
+"""Validación anidada del modelo propuesto: PADRE por estación + XGBoost, con el mismo esquema del Entregable 2.
 
 Uso (desde la carpeta entregable1):
     python scripts/padre_anidado.py             # 4 trimestres de 2024 (bucle externo)
@@ -13,7 +13,7 @@ Para cada pliegue externo, igual que los 7 modelos del curso:
   genética, con el mismo presupuesto y las mismas implementaciones de e3/optimizadores.py) sobre el espacio
   del XGBoost más los hiperparámetros de PADRE (parejas por fila y anclas). Para cada configuración se elige también el peso ``w`` de la mezcla
   ``w · PADRE + (1 − w) · XGBoost``; el XGBoost de la mezcla usa la configuración que eligió su propia búsqueda
-  en ese pliegue (Entregable 3), ajustado sobre las mismas submuestras;
+  en ese pliegue (Entregable 2), ajustado sobre las mismas submuestras;
 - la configuración y el peso elegidos se reentrenan con todo el entrenamiento del pliegue y se miden una vez.
 Cada pliegue guarda un JSON y sus pronósticos en resultados/e3/padre_anidado/; si el proceso se corta, al
 relanzarlo los pliegues terminados no se repiten.

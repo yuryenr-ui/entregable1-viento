@@ -4,7 +4,7 @@ Uso (desde la carpeta entregable1):
     python scripts/padre_solo.py
 
 Motivo: responder a la objeción de que el ensamble de 5 incluye modelos del curso. Los dos PADRE son los mismos
-del ensamble (4 parejas, 20 anclas, motores con los hiperparámetros del Entregable 3) y están en caché en
+del ensamble (4 parejas, 20 anclas, motores con los hiperparámetros del Entregable 2) y están en caché en
 resultados/e3/ensamble_padre/; aquí solo se promedian, sin pesos ajustados.
 
 Regla fijada ANTES de ver los resultados (19/10/2026): en los 4 trimestres de 2024 se compara PADRE (2) con cada

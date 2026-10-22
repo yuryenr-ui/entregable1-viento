@@ -21,3 +21,4 @@ nbformat
 nbconvert
 ipykernel
 jupyter-book==2.1.6
+faiss-cpu==1.15.1

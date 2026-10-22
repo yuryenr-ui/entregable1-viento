@@ -12,14 +12,16 @@ modelo que comparamos con referencias simples.
   7 departamentos del Caribe, 2020–2025. Licencia CC BY-SA 4.0, con atribución al IDEAM.
 - **Pregunta:** cuál será la velocidad media del viento en la hora que empieza 24 horas después de la
   última hora observada.
-- **Modelo base:** un SVR lineal, comparado con la persistencia, la climatología y un modelo de media.
-  Reduce el error de la persistencia en un `13 %` (`R² = 0.74` en 2025).
-- **Comparación de modelos:** siete modelos de regresión con cuatro optimizadores de hiperparámetros y
-  validación anidada temporal. El mejor en 2025 es Random Forest (`RMSE = 0.7227 m/s`).
-- **Modelo propuesto:** un ensamble con regresión por diferencias de pares por estación (PADRE) que
-  supera con diferencia significativa a cada uno de los siete modelos en 2025 (`RMSE = 0.7193 m/s`).
-- **Dashboard interactivo:** https://viento-caribe-dashboard.onrender.com (descrito en su página de
-  este libro).
+
+El libro sigue los tres entregables del curso:
+
+- **Entregable 1, datos, EDA y modelo base:** un SVR lineal, comparado con la persistencia, la
+  climatología y un modelo de media. Reduce el error de la persistencia en un `13 %` (`R² = 0.74` en 2025).
+- **Entregable 1.5, dashboard:** el tablero interactivo en https://viento-caribe-dashboard.onrender.com.
+- **Entregable 2, comparación de modelos:** siete modelos de regresión con cuatro optimizadores de
+  hiperparámetros y validación anidada temporal. El mejor en 2025 es Random Forest (`RMSE = 0.7227 m/s`).
+- **Entregable 3, modelo original:** un ensamble con regresión por diferencias de pares por estación (PADRE)
+  que supera con diferencia significativa a cada uno de los siete modelos en 2025 (`RMSE = 0.7193 m/s`).
 
 ## Reproducibilidad
 

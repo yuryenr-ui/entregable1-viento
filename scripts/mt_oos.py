@@ -6,7 +6,7 @@ que la correcci처n aprende un error que no es el que comete al pronosticar. Aqu�
 pliegue externo de 2024, se obtienen pron처sticos fuera de muestra con validaci처n cruzada por bloques de tiempo
 contiguos (con una franja de 48 h purgada a cada lado) y la correcci처n se ajusta con esos residuos.
 
-Bases comparadas: XGBoost, promedio RF+XGB y promedio RF+XGB+SVR (configuraciones elegidas en el Entregable 3
+Bases comparadas: XGBoost, promedio RF+XGB y promedio RF+XGB+SVR (configuraciones elegidas en el Entregable 2
 para cada pliegue). 2025 no se usa.
 
 Etapa 1 (lenta, reanudable): guarda en ``resultados/e3/mt_oos/`` los pron처sticos OOS y de validaci처n de cada base.

@@ -5,10 +5,10 @@ Uso (desde la carpeta entregable1):
 
 La extensión se anunció junto con el modelo principal, antes de evaluar 2025, con la configuración de la
 exploración de 2024: PADRE por estación con 4 parejas por fila y 20 anclas, cuyos motores (XGBoost y Random
-Forest) usan los hiperparámetros que eligió el Entregable 3 en cada pliegue, y un promedio simple de los cinco
+Forest) usan los hiperparámetros que eligió el Entregable 2 en cada pliegue, y un promedio simple de los cinco
 pronósticos, sin pesos ajustados. Los tres modelos del curso entran con sus pronósticos guardados.
 
-Se evalúa en los 4 trimestres de 2024 (bucle externo) y una sola vez en 2025, con las pruebas del Entregable 3:
+Se evalúa en los 4 trimestres de 2024 (bucle externo) y una sola vez en 2025, con las pruebas del Entregable 2:
 DM-HLN con Holm frente a los 7 modelos, Clark-West frente a Random Forest y XGBoost (el ensamble contiene a
 ambos), MCS y SPA. Resultados en resultados/e3/ensamble_padre/ (los PADRE quedan en caché).
 """
