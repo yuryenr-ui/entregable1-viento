@@ -60,7 +60,9 @@ print({p: md.version(p) for p in ["numpy", "pandas", "scikit-learn", "xgboost", 
 # %% [markdown]
 # ## 10.3 Tabla maestra de experimentos
 #
-# Las 28 combinaciones de modelo y optimizador del capítulo 5, las dos búsquedas con eliminación sucesiva
+# El universo de `140` combinaciones suma `112` de clasificación (con técnicas de balanceo) y `28` de regresión;
+# como nuestra tarea es de regresión, las que corresponden son esas `28`.
+# La tabla reúne las 28 combinaciones de modelo y optimizador del capítulo 5, las dos búsquedas con eliminación sucesiva
 # (Random Forest y XGBoost) y el modelo original, con la métrica del bucle
 # externo (media ± desviación estándar de los cuatro trimestres de 2024), el resultado de 2025, el tiempo de
 # búsqueda y la semilla. La tabla se guarda en `resultados/e3/tabla_maestra_final.csv`.
